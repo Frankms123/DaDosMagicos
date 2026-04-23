@@ -6,7 +6,11 @@ let db;
 async function connect() {
   if (db) return db;
 
-  client = new MongoClient(process.env.MONGODB_URI);
+  const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error('La variable de entorno MONGO_URI no está definida');
+  }
+  client = new MongoClient(uri);
   await client.connect();
   db = client.db(process.env.MONGODB_DB || 'dado_triple');
   console.log('📦 Conectado a MongoDB');
