@@ -6,7 +6,7 @@ const {
   removeRoom,
   getRoomSafeState,
   getRoomStateForSpectator,
-} = require('../rooms/roomManager');
+} = require('../rooms/roommanager');
 const {
   TOTAL_ROUNDS,
   createPlayerState,
