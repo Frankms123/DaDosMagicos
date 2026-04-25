@@ -82,7 +82,8 @@ function logScoreboard(players) {
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
     const isMe = p.name === playerName ? COLORS.bold + MY_COLOR : COLORS.dim;
     const pts = String(p.totalPoints).padStart(4);
-    console.log(`${COLORS.dim}  │${COLORS.reset} ${medal} ${isMe}${p.name.padEnd(12)}${COLORS.reset} ${COLORS.yellow}${pts} pts${COLORS.reset}`);
+    const name = p.name ?? '???';
+    console.log(`${COLORS.dim}  │${COLORS.reset} ${medal} ${isMe}${name.padEnd(12)}${COLORS.reset} ${COLORS.yellow}${pts} pts${COLORS.reset}`);
   });
   console.log(`${COLORS.dim}  └──────────────────────────────────────┘${COLORS.reset}\n`);
 }

@@ -10,7 +10,7 @@
 
 const WebSocket = require('ws');
 
-const SERVER_URL = 'ws://localhost:3000';
+const SERVER_URL = 'ws://169.254.83.107:3000';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
