@@ -285,6 +285,11 @@ function startRound(room) {
 }
 
 async function endRound(room) {
+  // Guard: evitar doble ejecución si ya está en scoring
+  if (room.roundPhase === 'scoring') {
+    console.log(`⚠️  endRound ignorado — sala ${room.code} ya está en scoring`);
+    return;
+  }
   room.roundPhase = 'scoring';
 
   // Calcular puntos y construir snapshot en un solo paso
@@ -437,7 +442,8 @@ function handleDisconnect(ws) {
               state: getRoomSafeState(room, pid),
             }));
 
-            if (allPlayersSelectedDice(room)) {
+            // Verificar fase antes de endRound para evitar doble ejecución
+            if (room.roundPhase === 'selecting' && allPlayersSelectedDice(room)) {
               endRound(room);
             }
           }
