@@ -10,6 +10,7 @@ async function connect() {
   if (!uri) {
     throw new Error('La variable de entorno MONGO_URI no está definida');
   }
+  console.log('🔗 Intentando conectar a:', uri.split('@')[1] ? '***@' + uri.split('@')[1] : uri);
   client = new MongoClient(uri);
   await client.connect();
   db = client.db(process.env.MONGODB_DB || 'dado_triple');
