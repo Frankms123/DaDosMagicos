@@ -1,47 +1,34 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform,
-  Animated, ActivityIndicator, Keyboard,
+  StyleSheet, Platform, Animated,
+  ActivityIndicator, Keyboard, ScrollView, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ShieldCheck, User, Mail, Lock, AlertCircle, CheckCircle2 } from 'lucide-react-native';
 import { authApi } from '../services/apiService';
 import useGameStore from '../store/useGameStore';
 
-const BG = '#0F0F1A';
-const CARD = '#1A1A2E';
+const BG     = '#0F0F1A';
+const CARD   = '#1A1A2E';
 const BORDER = '#2A2A45';
-const TEXT = '#E2E8F0';
-const MUTED = '#64748B';
+const TEXT   = '#E2E8F0';
+const MUTED  = '#64748B';
 const PURPLE = '#7C3AED';
+const GOLD   = '#F59E0B';
 const SUCCESS = '#10B981';
-const DANGER = '#EF4444';
+const DANGER  = '#EF4444';
 
-function Field({ label, value, onChangeText, placeholder, keyboardType, autoCapitalize, secureTextEntry, style, icon: Icon }) {
+// ─── Campo de texto ───────────────────────────────────────────────────────────
+function Field({ label, value, onChangeText, placeholder, keyboardType, autoCapitalize, secureTextEntry, icon: Icon }) {
   const [focused, setFocused] = useState(false);
-  const borderAnim = useRef(new Animated.Value(0)).current;
-
-  const handleFocus = () => {
-    setFocused(true);
-    Animated.timing(borderAnim, { toValue: 1, duration: 200, useNativeDriver: false }).start();
-  };
-  const handleBlur = () => {
-    setFocused(false);
-    Animated.timing(borderAnim, { toValue: 0, duration: 200, useNativeDriver: false }).start();
-  };
-
-  const borderColor = borderAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [BORDER, PURPLE],
-  });
 
   return (
-    <View style={[styles.fieldWrapper, style]}>
+    <View style={styles.fieldWrapper}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <Animated.View style={[styles.fieldBorder, { borderColor }]}>
+      <View style={[styles.fieldBorder, focused && styles.fieldBorderFocused]}>
         <View style={styles.fieldRow}>
-          {Icon && <Icon size={20} color={focused ? PURPLE : MUTED} style={styles.fieldIcon} />}
+          {Icon && <Icon size={18} color={focused ? PURPLE : MUTED} style={styles.fieldIcon} />}
           <TextInput
             style={styles.fieldInput}
             value={value}
@@ -52,82 +39,42 @@ function Field({ label, value, onChangeText, placeholder, keyboardType, autoCapi
             autoCapitalize={autoCapitalize || 'none'}
             autoCorrect={false}
             secureTextEntry={secureTextEntry}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            underlineColorAndroid="transparent"
           />
         </View>
-      </Animated.View>
+      </View>
     </View>
   );
 }
 
+// ─── Pantalla ─────────────────────────────────────────────────────────────────
 export default function AuthScreen({ navigation }) {
-  const [tab, setTab] = useState('login'); // 'login' | 'register'
-
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [tab,      setTab]      = useState('login');
+  const [name,     setName]     = useState('');
+  const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-
-  // Animaciones
-  const logoAnim = useRef(new Animated.Value(0)).current;
-  const cardAnim = useRef(new Animated.Value(40)).current;
-  const cardOpacity = useRef(new Animated.Value(0)).current;
-  const tabIndicator = useRef(new Animated.Value(0)).current;
-  const errorShake = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(logoAnim, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
-      Animated.sequence([
-        Animated.delay(200),
-        Animated.parallel([
-          Animated.spring(cardAnim, { toValue: 0, useNativeDriver: true, tension: 70, friction: 10 }),
-          Animated.timing(cardOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        ]),
-      ]),
-    ]).start();
-  }, []);
-
-  const shakeError = () => {
-    Animated.sequence([
-      Animated.timing(errorShake, { toValue: 10, duration: 60, useNativeDriver: true }),
-      Animated.timing(errorShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-      Animated.timing(errorShake, { toValue: 6, duration: 60, useNativeDriver: true }),
-      Animated.timing(errorShake, { toValue: 0, duration: 60, useNativeDriver: true }),
-    ]).start();
-  };
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(null);
+  const [success,  setSuccess]  = useState(null);
 
   const switchTab = (t) => {
     setTab(t);
     setError(null);
     setSuccess(null);
-    Animated.spring(tabIndicator, {
-      toValue: t === 'login' ? 0 : 1,
-      useNativeDriver: false,
-      tension: 80, friction: 12,
-    }).start();
   };
 
   const validate = () => {
     Keyboard.dismiss();
     if (tab === 'register' && !name.trim()) {
-      setError('Ingresa tu nombre para continuar');
-      shakeError();
-      return false;
+      setError('Ingresa tu nombre'); return false;
     }
     if (!email.trim() || !email.includes('@')) {
-      setError('Ingresa un correo electrónico válido');
-      shakeError();
-      return false;
+      setError('Ingresa un correo válido'); return false;
     }
     if (!password) {
-      setError('Ingresa tu contraseña');
-      shakeError();
-      return false;
+      setError('Ingresa tu contraseña'); return false;
     }
     return true;
   };
@@ -137,7 +84,6 @@ export default function AuthScreen({ navigation }) {
     setError(null);
     setSuccess(null);
     setLoading(true);
-
     try {
       let data;
       if (tab === 'login') {
@@ -145,60 +91,61 @@ export default function AuthScreen({ navigation }) {
       } else {
         data = await authApi.register(name.trim(), email.trim(), password);
       }
-
-      console.log('[Auth] Respuesta del servidor:', JSON.stringify(data));
       const userName = data.user?.name || data.user?.email || '';
       useGameStore.setState({ playerName: userName, playerEmail: data.user?.email || '' });
-
-      setSuccess(tab === 'login' ? '¡Bienvenido de vuelta!' : '¡Cuenta creada exitosamente!');
-
-      setTimeout(() => {
-        navigation.replace('Lobby');
-      }, 1000);
-
+      setSuccess(tab === 'login' ? '¡Bienvenido de vuelta!' : '¡Cuenta creada!');
+      setTimeout(() => navigation.replace('Lobby'), 900);
     } catch (err) {
       setError(err.message);
-      shakeError();
     } finally {
       setLoading(false);
     }
   };
 
-  const indicatorLeft = tabIndicator.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '50%'],
-  });
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={styles.root}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <StatusBar barStyle="light-content" backgroundColor={BG} />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <Animated.View style={[styles.header, { transform: [{ scale: logoAnim }], opacity: logoAnim }]}>
+        {/* Logo */}
+        <View style={styles.header}>
           <View style={styles.logoCircle}>
-            <ShieldCheck size={48} color={GOLD} strokeWidth={2.5} />
+            <ShieldCheck size={44} color={GOLD} strokeWidth={2.5} />
           </View>
           <Text style={styles.title}>Dado Triple</Text>
-          <Text style={styles.subtitle}>Iniciar Sesión o Registro</Text>
-        </Animated.View>
+          <Text style={styles.subtitle}>El Plan del Diablo</Text>
+        </View>
 
-        <Animated.View
-          style={[
-            styles.card,
-            { opacity: cardOpacity, transform: [{ translateY: cardAnim }] },
-          ]}
-        >
+        {/* Card */}
+        <View style={styles.card}>
+
+          {/* Tabs */}
           <View style={styles.tabs}>
-            <Animated.View style={[styles.tabIndicator, { left: indicatorLeft, width: '50%' }]} />
-            <TouchableOpacity style={styles.tab} onPress={() => switchTab('login')} activeOpacity={0.7}>
-              <Text style={[styles.tabText, tab === 'login' && styles.tabTextActive]}>Iniciar Sesión</Text>
+            <TouchableOpacity
+              style={[styles.tab, tab === 'login' && styles.tabActive]}
+              onPress={() => switchTab('login')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.tabText, tab === 'login' && styles.tabTextActive]}>
+                Iniciar Sesión
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.tab} onPress={() => switchTab('register')} activeOpacity={0.7}>
-              <Text style={[styles.tabText, tab === 'register' && styles.tabTextActive]}>Registrarse</Text>
+            <TouchableOpacity
+              style={[styles.tab, tab === 'register' && styles.tabActive]}
+              onPress={() => switchTab('register')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.tabText, tab === 'register' && styles.tabTextActive]}>
+                Registrarse
+              </Text>
             </TouchableOpacity>
           </View>
 
+          {/* Campos */}
           {tab === 'register' && (
             <Field
               label="TU NOMBRE"
@@ -228,121 +175,142 @@ export default function AuthScreen({ navigation }) {
             icon={Lock}
           />
 
+          {/* Error */}
           {error && (
-            <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
-              <AlertCircle size={18} color={DANGER} style={styles.boxIcon} />
+            <View style={styles.errorBox}>
+              <AlertCircle size={16} color={DANGER} />
               <Text style={styles.errorText}>{error}</Text>
-            </Animated.View>
+            </View>
           )}
 
+          {/* Éxito */}
           {success && (
             <View style={styles.successBox}>
-              <CheckCircle2 size={18} color={SUCCESS} style={styles.boxIcon} />
+              <CheckCircle2 size={16} color={SUCCESS} />
               <Text style={styles.successText}>{success}</Text>
             </View>
           )}
 
+          {/* Botón */}
           <TouchableOpacity
             style={[styles.actionBtn, loading && styles.actionBtnDisabled]}
             onPress={handleAction}
             disabled={loading}
             activeOpacity={0.85}
           >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.actionBtnText}>
-                {tab === 'login' ? 'Entrar' : 'Crear cuenta'}
-              </Text>
-            )}
+            {loading
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.actionBtnText}>
+                  {tab === 'login' ? 'Entrar' : 'Crear cuenta'}
+                </Text>
+            }
           </TouchableOpacity>
-        </Animated.View>
-      </KeyboardAvoidingView>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-const GOLD = '#F59E0B';
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
-  root: {
-    flex: 1, backgroundColor: BG,
-    alignItems: 'center', justifyContent: 'center',
+  safe:    { flex: 1, backgroundColor: BG },
+  scroll:  { flex: 1, backgroundColor: BG },
+  content: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingTop: 40,
   },
-  header: { alignItems: 'center', marginBottom: 32 },
+
+  header: { alignItems: 'center', marginBottom: 32, width: '100%' },
   logoCircle: {
-    width: 90, height: 90, borderRadius: 45,
-    backgroundColor: GOLD + '15', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: GOLD + '40', marginBottom: 12,
-    shadowColor: GOLD, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3, shadowRadius: 15, elevation: 8,
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: GOLD + '15',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: GOLD + '40',
+    marginBottom: 14,
   },
-  title: { fontSize: 32, fontWeight: '900', color: TEXT, letterSpacing: 1 },
-  subtitle: { fontSize: 13, color: MUTED, marginTop: 4, letterSpacing: 0.5 },
+  title:    { fontSize: 30, fontWeight: '900', color: TEXT, letterSpacing: 1 },
+  subtitle: { fontSize: 12, color: MUTED, marginTop: 4 },
 
   card: {
+    width: '100%',
     backgroundColor: CARD,
     borderRadius: 24,
     borderWidth: 1.5,
     borderColor: BORDER,
-    padding: 24,
-    width: '100%',
-    shadowColor: PURPLE, shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.4, shadowRadius: 20, elevation: 12,
+    padding: 22,
   },
+
+  // Tabs — sin Animated para evitar problemas de z-index
   tabs: {
-    flexDirection: 'row', backgroundColor: BG,
-    borderRadius: 16, padding: 4,
-    marginBottom: 22, position: 'relative', overflow: 'hidden',
-    borderWidth: 1, borderColor: BORDER,
+    flexDirection: 'row',
+    backgroundColor: BG,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    marginBottom: 22,
+    overflow: 'hidden',
   },
-  tabIndicator: {
-    position: 'absolute', top: 4, bottom: 4,
-    backgroundColor: PURPLE, borderRadius: 12,
+  tab: {
+    flex: 1,
+    paddingVertical: 13,
+    alignItems: 'center',
   },
-  tab: { flex: 1, paddingVertical: 14, alignItems: 'center', zIndex: 1 },
-  tabText: { fontSize: 13, fontWeight: '700', color: MUTED, letterSpacing: 0.5 },
+  tabActive: {
+    backgroundColor: PURPLE,
+  },
+  tabText:       { fontSize: 13, fontWeight: '700', color: MUTED },
   tabTextActive: { color: TEXT },
 
+  // Campos — sin Animated.View en el borde
   fieldWrapper: { marginBottom: 16 },
   fieldLabel: {
     fontSize: 10, fontWeight: '800', color: MUTED,
     letterSpacing: 2, marginBottom: 8,
   },
   fieldBorder: {
-    borderWidth: 1.5, borderRadius: 14,
-    backgroundColor: BG, overflow: 'hidden',
+    borderWidth: 1.5, borderRadius: 12,
+    borderColor: BORDER,
+    backgroundColor: BG,
   },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
-  fieldIcon: { marginRight: 12 },
+  fieldBorderFocused: {
+    borderColor: PURPLE,
+  },
+  fieldRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
+  fieldIcon: { marginRight: 10 },
   fieldInput: {
-    flex: 1, paddingVertical: 14,
-    color: TEXT, fontSize: 16,
+    flex: 1,
+    paddingVertical: 13,
+    color: TEXT,
+    fontSize: 15,
   },
 
   errorBox: {
-    backgroundColor: DANGER + '15', borderRadius: 12,
-    borderWidth: 1.5, borderColor: DANGER + '40',
-    padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: DANGER + '15',
+    borderRadius: 10, borderWidth: 1, borderColor: DANGER + '40',
+    padding: 11, marginBottom: 12,
   },
-  boxIcon: { marginRight: 8 },
-  errorText: { fontSize: 13, color: DANGER, fontWeight: '700' },
+  errorText: { flex: 1, fontSize: 12, color: DANGER, fontWeight: '600' },
 
   successBox: {
-    backgroundColor: SUCCESS + '15', borderRadius: 12,
-    borderWidth: 1.5, borderColor: SUCCESS + '40',
-    padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: SUCCESS + '15',
+    borderRadius: 10, borderWidth: 1, borderColor: SUCCESS + '40',
+    padding: 11, marginBottom: 12,
   },
-  successText: { fontSize: 13, color: SUCCESS, fontWeight: '700' },
+  successText: { flex: 1, fontSize: 12, color: SUCCESS, fontWeight: '600' },
 
   actionBtn: {
-    backgroundColor: PURPLE, borderRadius: 16,
-    paddingVertical: 18, alignItems: 'center',
-    shadowColor: PURPLE, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5, shadowRadius: 14, elevation: 10,
+    backgroundColor: PURPLE,
+    borderRadius: 14,
+    paddingVertical: 17,
+    alignItems: 'center',
+    marginTop: 4,
   },
-  actionBtnDisabled:  { opacity: 0.5 },
-  actionBtnText: { fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+  actionBtnDisabled: { opacity: 0.5 },
+  actionBtnText: { fontSize: 16, fontWeight: '800', color: '#fff' },
 });

@@ -211,7 +211,7 @@ export default function LobbyScreen() {
               {isConnected ? 'En Línea' : 'Desconectado'}
             </Text>
           </View>
-
+        </Animated.View>
         {/* ── Card principal ── */}
         <Animated.View
           style={[
@@ -231,61 +231,59 @@ export default function LobbyScreen() {
             ))}
           </View>
 
-          <View style={styles.card}>
-            {!playerName ? (
-              <Field 
-                label="TU NOMBRE"
-                value={localName}
-                onChangeText={setLocalName}
-                placeholder="Ej. Frank Mora"
-                icon={User}
-                style={{ marginBottom: 20 }}
-              />
-            ) : (
-              <View style={styles.greetingBox}>
-                <View style={styles.userAvatar}><ShieldCheck size={20} color={PURPLE} /></View>
-                <View>
-                  <Text style={styles.greetingLabel}>JUGANDO COMO</Text>
-                  <Text style={styles.greetingName}>{playerName}</Text>
-                </View>
+          {!playerName ? (
+            <Field 
+              label="TU NOMBRE"
+              value={localName}
+              onChangeText={setLocalName}
+              placeholder="Ej. Frank Mora"
+              icon={User}
+              style={{ marginBottom: 20 }}
+            />
+          ) : (
+            <View style={styles.greetingBox}>
+              <View style={styles.userAvatar}><ShieldCheck size={20} color={PURPLE} /></View>
+              <View>
+                <Text style={styles.greetingLabel}>JUGANDO COMO</Text>
+                <Text style={styles.greetingName}>{playerName}</Text>
               </View>
-            )}
-
-            {(tab === 'join' || tab === 'spectator') && (
-              <Field 
-                label="CÓDIGO DE SALA"
-                value={roomCode}
-                onChangeText={(t) => setRoomCode(t.toUpperCase())}
-                placeholder="ABCD"
-                maxLength={4}
-                autoCapitalize="characters"
-                icon={Gamepad2}
-                inputStyle={styles.codeInputStyle}
-              />
-            )}
-
-            <View style={styles.actions}>
-              {loading ? (
-                <ActivityIndicator color={PURPLE} size="large" />
-              ) : (
-                <TouchableOpacity 
-                  style={[
-                    styles.actionBtn,
-                    tab === 'create' ? styles.actionBtnCreate : 
-                    tab === 'join' ? styles.actionBtnJoin : styles.actionBtnSpectator,
-                    (!isConnected) && styles.actionBtnDisabled
-                  ]}
-                  onPress={tab === 'create' ? handleCreate : tab === 'join' ? handleJoin : handleSpectator}
-                  disabled={!isConnected}
-                >
-                  <Text style={styles.actionBtnText}>
-                    {tab === 'create' ? 'CREAR PARTIDA' : tab === 'join' ? 'ENTRAR A LA SALA' : 'VER PARTIDA'}
-                  </Text>
-                </TouchableOpacity>
-              )}
             </View>
           )}
 
+          {(tab === 'join' || tab === 'spectator') && (
+            <Field 
+              label="CÓDIGO DE SALA"
+              value={roomCode}
+              onChangeText={(t) => setRoomCode(t.toUpperCase())}
+              placeholder="ABCD"
+              maxLength={4}
+              autoCapitalize="characters"
+              icon={Gamepad2}
+              inputStyle={styles.codeInputStyle}
+            />
+          )}
+
+          <View style={styles.actions}>
+            {loading ? (
+              <ActivityIndicator color={PURPLE} size="large" />
+            ) : (
+              <TouchableOpacity 
+                style={[
+                  styles.actionBtn,
+                  tab === 'create' ? styles.actionBtnCreate : 
+                  tab === 'join' ? styles.actionBtnJoin : styles.actionBtnSpectator,
+                  (!isConnected) && styles.actionBtnDisabled
+                ]}
+                onPress={tab === 'create' ? handleCreate : tab === 'join' ? handleJoin : handleSpectator}
+                disabled={!isConnected}
+              >
+                <Text style={styles.actionBtnText}>
+                  {tab === 'create' ? 'CREAR PARTIDA' : tab === 'join' ? 'ENTRAR A LA SALA' : 'VER PARTIDA'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        
           {/* Error */}
           {error && (
             <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
@@ -385,8 +383,6 @@ const styles = StyleSheet.create({
   actionBtnDisabled:  { opacity: 0.55 },
   actionBtnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
 
-  footer: { marginTop: 28, fontSize: 11, color: BORDER },
-});
   userAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: BORDER, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   greetingLabel: { fontSize: 10, fontWeight: '800', color: MUTED, letterSpacing: 1 },
   greetingName: { fontSize: 18, fontWeight: '700', color: TEXT },

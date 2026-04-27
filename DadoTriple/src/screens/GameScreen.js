@@ -153,101 +153,87 @@ const PredictionModal = forwardRef(function PredictionModal({ visible, launchNum
             ))}
           </View>
 
-      <Animated.View style={[styles.bsContainer, { transform: [{ translateY }] }]}>
-        {/* Handle + botón colapsar/expandir */}
-        <View style={styles.bsHandleRow}>
-          <View style={styles.bsHandle} />
-          <TouchableOpacity
-            style={styles.bsCollapseBtn}
-            onPress={collapsed ? handleExpand : handleCollapse}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.confirmBtnText}>
-              {selected ? 'Confirmar predicción' : 'Elige una opción'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+          {/* Contenido — se oculta al colapsar */}
+          {!collapsed && (
+            <>
+              <Text style={styles.bsLaunch}>LANZAMIENTO {launchNumber}</Text>
+              <Text style={styles.bsTitle}>¿Cuántos puntos obtendrás?</Text>
+              <Text style={styles.bsSub}>Mira tus dados arriba y predice</Text>
 
-        {/* Contenido — se oculta al colapsar */}
-        {!collapsed && (
-          <>
-            <Text style={styles.bsLaunch}>LANZAMIENTO {launchNumber}</Text>
-            <Text style={styles.bsTitle}>¿Cuántos puntos obtendrás?</Text>
-            <Text style={styles.bsSub}>Mira tus dados arriba y predice</Text>
-
-            <View style={styles.bsOptions}>
-              {PREDICTION_OPTIONS.map(opt => (
-                <TouchableOpacity
-                  key={opt.key}
-                  style={[
-                    styles.bsOption,
-                    { borderColor: opt.color + '40' },
-                    selected === opt.key && {
-                      backgroundColor: opt.color + '20',
-                      borderColor: opt.color,
-                    },
-                  ]}
-                  onPress={() => setSelected(opt.key)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.bsOptionEmoji}>{opt.emoji}</Text>
-                  <View style={styles.bsOptionText}>
-                    <Text style={[styles.bsOptionLabel, {
-                      color: selected === opt.key ? opt.color : TEXT,
-                    }]}>
-                      {opt.label}
-                    </Text>
-                    <Text style={styles.bsOptionDesc}>{opt.desc}</Text>
-                  </View>
-                  {selected === opt.key && (
-                    <View style={[styles.bsOptionCheck, { backgroundColor: opt.color }]}>
-                      <Text style={styles.bsOptionCheckText}>✓</Text>
+              <View style={styles.bsOptions}>
+                {PREDICTION_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[
+                      styles.bsOption,
+                      { borderColor: opt.color + '40' },
+                      selected === opt.key && {
+                        backgroundColor: opt.color + '20',
+                        borderColor: opt.color,
+                      },
+                    ]}
+                    onPress={() => setSelected(opt.key)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.bsOptionEmoji}>{opt.emoji}</Text>
+                    <View style={styles.bsOptionText}>
+                      <Text style={[styles.bsOptionLabel, {
+                        color: selected === opt.key ? opt.color : TEXT,
+                      }]}>
+                        {opt.label}
+                      </Text>
+                      <Text style={styles.bsOptionDesc}>{opt.desc}</Text>
                     </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
+                    {selected === opt.key && (
+                      <View style={[styles.bsOptionCheck, { backgroundColor: opt.color }]}>
+                        <Text style={styles.bsOptionCheckText}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-            <TouchableOpacity
-              style={[styles.bsConfirmBtn, !selected && styles.bsConfirmBtnDisabled]}
-              onPress={handleConfirm}
-              disabled={!selected}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.bsConfirmBtnText}>
-                {selected ? '✅ Confirmar predicción' : 'Elige una opción'}
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* Vista colapsada — solo muestra opción seleccionada si hay una */}
-        {collapsed && (
-          <View style={styles.bsCollapsedContent}>
-            {selected ? (
-              <>
-                <Text style={styles.bsCollapsedLabel}>Tu predicción:</Text>
-                <Text style={[styles.bsCollapsedValue, {
-                  color: PREDICTION_OPTIONS.find(o => o.key === selected)?.color ?? TEXT
-                }]}>
-                  {PREDICTION_OPTIONS.find(o => o.key === selected)?.emoji}{' '}
-                  {PREDICTION_OPTIONS.find(o => o.key === selected)?.label}
+              <TouchableOpacity
+                style={[styles.bsConfirmBtn, !selected && styles.bsConfirmBtnDisabled]}
+                onPress={handleConfirm}
+                disabled={!selected}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.bsConfirmBtnText}>
+                  {selected ? '✅ Confirmar predicción' : 'Elige una opción'}
                 </Text>
-                <TouchableOpacity
-                  style={styles.bsConfirmBtnSmall}
-                  onPress={handleConfirm}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.bsConfirmBtnText}>✅ Confirmar</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <Text style={styles.bsCollapsedHint}>Toca "Ver predicción" para elegir</Text>
-            )}
-          </View>
-        )}
-      </Animated.View>
-    </>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Vista colapsada — solo muestra opción seleccionada si hay una */}
+          {collapsed && (
+            <View style={styles.bsCollapsedContent}>
+              {selected ? (
+                <>
+                  <Text style={styles.bsCollapsedLabel}>Tu predicción:</Text>
+                  <Text style={[styles.bsCollapsedValue, {
+                    color: PREDICTION_OPTIONS.find(o => o.key === selected)?.color ?? TEXT
+                  }]}>
+                    {PREDICTION_OPTIONS.find(o => o.key === selected)?.emoji}{' '}
+                    {PREDICTION_OPTIONS.find(o => o.key === selected)?.label}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.bsConfirmBtnSmall}
+                    onPress={handleConfirm}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.bsConfirmBtnText}>✅ Confirmar</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <Text style={styles.bsCollapsedHint}>Toca "Ver predicción" para elegir</Text>
+              )}
+            </View>
+          )}
+        </Animated.View>
+      </View>
+    </Modal>
   );
 });
 
@@ -803,7 +789,6 @@ export default function GameScreen({ route, navigation }) {
   const countdownRef = useRef(null);
   const throwTimerRef = useRef(null);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
-  const countdownRef = useRef(null);
   const predictionSheetRef = useRef(null);
 
   const headerAnim = useRef(new Animated.Value(0)).current;

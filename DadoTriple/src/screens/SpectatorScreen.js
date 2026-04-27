@@ -27,6 +27,7 @@ const PURPLE = colors.purple;
 const GOLD   = colors.gold;
 const GREEN  = colors.green;
 const BLUE   = colors.blue;
+const RED    = colors.red;
 
 const VALUE_COLOR = { 1:'#94A3B8', 2:'#60A5FA', 3:'#34D399', 4:'#FBBF24', 5:'#F87171', 6:'#A78BFA' };
 const AVATAR_COLORS = ['#7C3AED','#F59E0B','#10B981','#EF4444','#3B82F6','#EC4899'];
