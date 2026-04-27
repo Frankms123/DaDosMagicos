@@ -8,6 +8,7 @@ import {
   ActivityIndicator, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LogOut, ShieldCheck, Trophy, Award, Medal, TrendingUp, BarChart3, Target } from 'lucide-react-native';
 import useGameStore from '../store/useGameStore';
 import { API_URL } from '../services/apiService';
 
@@ -40,11 +41,16 @@ function StatCard({ value, label, color = TEXT, emoji }) {
   );
 }
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const playerName  = useGameStore(s => s.playerName);
   const [stats,    setStats]    = useState(null);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
+
+  const handleLogout = () => {
+    useGameStore.setState({ playerName: null });
+    navigation.navigate('Lobby');
+  };
 
   const fetchStats = async () => {
     if (!playerName) return;
@@ -197,6 +203,11 @@ export default function ProfileScreen() {
                 </View>
               ))}
             </View>
+            {/* Cerrar Sesión */}
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
+              <LogOut size={20} color="#EF4444" />
+              <Text style={styles.logoutText}>Cerrar sesión</Text>
+            </TouchableOpacity>
           </>
         )}
 
@@ -301,4 +312,13 @@ const styles = StyleSheet.create({
   badgeEmoji:       { fontSize: 24 },
   badgeLabel:       { fontSize: 9, fontWeight: '700', color: MUTED, textAlign: 'center', lineHeight: 12 },
   badgeLabelLocked: { color: BORDER },
+  
+  // Logout
+  logoutBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, marginTop: 20, paddingVertical: 16,
+    borderWidth: 1, borderColor: '#EF444440', borderRadius: 16,
+    backgroundColor: '#EF444410',
+  },
+  logoutText: { color: '#EF4444', fontSize: 15, fontWeight: '700' },
 });

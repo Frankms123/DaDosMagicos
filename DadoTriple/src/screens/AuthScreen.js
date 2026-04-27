@@ -5,7 +5,7 @@ import {
   ActivityIndicator, Keyboard, ScrollView, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ShieldCheck, User, Mail, Lock, AlertCircle, CheckCircle2 } from 'lucide-react-native';
+import { ShieldCheck, User, Mail, Lock, AlertCircle, CheckCircle2, Gamepad2 } from 'lucide-react-native';
 import { authApi } from '../services/apiService';
 import useGameStore from '../store/useGameStore';
 
@@ -205,6 +205,22 @@ export default function AuthScreen({ navigation }) {
                 </Text>
             }
           </TouchableOpacity>
+
+          {/* Opción Invitado */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>O TAMBIÉN</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity 
+            style={styles.guestBtn} 
+            onPress={() => navigation.navigate('Lobby')}
+            activeOpacity={0.7}
+          >
+            <Gamepad2 size={20} color={GOLD} />
+            <Text style={styles.guestBtnText}>Entrar como invitado</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={{ height: 40 }} />
@@ -313,4 +329,20 @@ const styles = StyleSheet.create({
   },
   actionBtnDisabled: { opacity: 0.5 },
   actionBtnText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+
+  // Divider
+  divider: {
+    flexDirection: 'row', alignItems: 'center', marginVertical: 20, gap: 10,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: BORDER },
+  dividerText: { fontSize: 10, fontWeight: '800', color: MUTED, letterSpacing: 1 },
+
+  // Guest Btn
+  guestBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, paddingVertical: 15, borderRadius: 14,
+    borderWidth: 1.5, borderColor: GOLD + '40',
+    backgroundColor: GOLD + '05',
+  },
+  guestBtnText: { fontSize: 15, fontWeight: '700', color: GOLD },
 });

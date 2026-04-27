@@ -4,6 +4,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { User, Gamepad2, Trophy } from 'lucide-react-native';
 
 import AuthScreen         from './src/screens/AuthScreen';
 import LobbyScreen        from './src/screens/LobbyScreen';
@@ -32,9 +33,9 @@ const HIDE_TAB_SCREENS = new Set([
 
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
 const TABS = [
-  { name: 'Profile', label: 'Perfil',   emoji: '👤' },
-  { name: 'Lobby',   label: 'Jugar',    emoji: '🎲' },
-  { name: 'Ranking', label: 'Ranking',  emoji: '🏆' },
+  { name: 'Profile', label: 'Perfil',   icon: User },
+  { name: 'Lobby',   label: 'Jugar',    icon: Gamepad2 },
+  { name: 'Ranking', label: 'Ranking',  icon: Trophy },
 ];
 
 function TabBar({ navigation, currentRoute }: { navigation: any; currentRoute: string }) {
@@ -49,6 +50,7 @@ function TabBar({ navigation, currentRoute }: { navigation: any; currentRoute: s
     ]}>
       {TABS.map(tab => {
         const active = currentRoute === tab.name;
+        const Icon = tab.icon;
         return (
           <TouchableOpacity
             key={tab.name}
@@ -57,7 +59,7 @@ function TabBar({ navigation, currentRoute }: { navigation: any; currentRoute: s
             activeOpacity={0.7}
           >
             <View style={[tabStyles.iconWrap, active && tabStyles.iconWrapActive]}>
-              <Text style={tabStyles.emoji}>{tab.emoji}</Text>
+              <Icon size={20} color={active ? PURPLE : MUTED} />
             </View>
             <Text style={[tabStyles.label, active && tabStyles.labelActive]}>
               {tab.label}
@@ -85,9 +87,8 @@ const tabStyles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   iconWrapActive: {
-    backgroundColor: PURPLE + '25',
+    backgroundColor: PURPLE + '20',
   },
-  emoji:       { fontSize: 20 },
   label:       { fontSize: 10, fontWeight: '600', color: MUTED },
   labelActive: { color: PURPLE, fontWeight: '800' },
 });
@@ -107,11 +108,13 @@ function AppNavigator() {
         animationEnabled: true,
       }}
     >
+      {/* Lobby como entrada principal */}
+      <Stack.Screen name="Lobby"   component={LobbyScreen} />
+
       {/* Auth */}
-      <Stack.Screen name="Auth"    component={AuthScreen} options={{ animationEnabled: false }} />
+      <Stack.Screen name="Auth"    component={AuthScreen} />
 
       {/* Tab screens */}
-      <Stack.Screen name="Lobby"   component={LobbyScreen} />
       <Stack.Screen name="Ranking" component={RankingScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
 
@@ -125,11 +128,10 @@ function AppNavigator() {
   );
 }
 
-// ─── Navigation ref para TabBar externa ──────────────────────────────────────
 const navigationRef = createNavigationContainerRef();
 
 export default function App() {
-  const [currentRoute, setCurrentRoute] = React.useState('Auth');
+  const [currentRoute, setCurrentRoute] = React.useState('Lobby');
 
   return (
     <SafeAreaProvider>

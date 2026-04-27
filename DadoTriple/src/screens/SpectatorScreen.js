@@ -307,6 +307,14 @@ export default function SpectatorScreen({ route, navigation }) {
     return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
   }, [currentTurnPlayerId, gamePhase]);
 
+  useEffect(() => {
+    // Al salir de la pantalla, asegurar limpieza
+    return () => {
+      useGameStore.getState().resetGame();
+      socketService.clearReconnectData();
+    };
+  }, []);
+
   const addLog = (msg, icon = 'Activity') => {
     setLog(prev => [
       { msg, icon, time: new Date().toLocaleTimeString('es-CR', { hour12: false }) },
