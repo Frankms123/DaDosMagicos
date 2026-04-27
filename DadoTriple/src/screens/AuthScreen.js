@@ -146,7 +146,9 @@ export default function AuthScreen({ navigation }) {
         data = await authApi.register(name.trim(), email.trim(), password);
       }
 
-      useGameStore.setState({ playerName: data.user.name, playerEmail: data.user.email });
+      console.log('[Auth] Respuesta del servidor:', JSON.stringify(data));
+      const userName = data.user?.name || data.user?.email || '';
+      useGameStore.setState({ playerName: userName, playerEmail: data.user?.email || '' });
 
       setSuccess(tab === 'login' ? '¡Bienvenido de vuelta!' : '¡Cuenta creada exitosamente!');
 
