@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
+import { playSound } from '../services/soundService';
 import useGameStore from '../store/useGameStore';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -165,6 +166,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
   }, []);
 
   const handleShare = async () => {
+    playSound('click', 0.6);
     try {
       await Share.share({
         message: `¡Únete a mi partida de Dado Triple!\nCódigo de sala: ${roomCode}\n\nDescarga la app y usa este código para unirte.`,
@@ -173,6 +175,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
   };
 
   const handleStartGame = () => {
+    playSound('click', 0.7);
     if (players.length < 2) {
       Alert.alert('¡Espera!', 'Necesitas al menos 2 jugadores para iniciar.');
       return;
@@ -182,6 +185,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
   };
 
   const handleBack = () => {
+    playSound('click', 0.55);
     socketService.disconnect();
     useGameStore.getState().resetGame();
     navigation.navigate('Lobby');

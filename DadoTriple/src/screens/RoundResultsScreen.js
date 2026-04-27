@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import useGameStore from '../store/useGameStore';
+import { playSound } from '../services/soundService';
 
 // ─── Colores ──────────────────────────────────────────────────────────────────
 const BG     = '#0F0F1A';
@@ -168,7 +169,7 @@ export default function RoundResultsScreen({ route, navigation }) {
   // Countdown automático
   useEffect(() => {
     if (countdown <= 0) {
-      handleContinue();
+      handleContinue(false);
       return;
     }
     const t = setTimeout(() => setCountdown(c => c - 1), 1000);
@@ -186,7 +187,8 @@ export default function RoundResultsScreen({ route, navigation }) {
     ]).start();
   }, []);
 
-  const handleContinue = () => {
+  const handleContinue = (withSound = true) => {
+    if (withSound) playSound('click', 0.55);
     if (isLastRound) {
       navigation.navigate('GameOver', { roomCode: roomCode_, playerName: playerName_ });
     }

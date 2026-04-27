@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
+import { playSound } from '../services/soundService';
 import useGameStore from '../store/useGameStore';
 
 // ─── Colores ──────────────────────────────────────────────────────────────────
@@ -190,6 +191,7 @@ export default function SpectatorScreen({ route, navigation }) {
   }, []);
 
   const handleExit = () => {
+    playSound('click', 0.55);
     socketService.disconnect();
     useGameStore.getState().resetGame();
     navigation.navigate('Lobby');

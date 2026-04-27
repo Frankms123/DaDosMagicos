@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import useGameStore from '../store/useGameStore';
 import socketService from '../services/socketService';
+import { playSound } from '../services/soundService';
 
 // ─── Colores ──────────────────────────────────────────────────────────────────
 const BG     = '#0F0F1A';
@@ -169,7 +170,13 @@ export default function GameOverScreen({ navigation }) {
   const winner   = gameOver?.winner;
   const isWinner = winner?.id === playerId || winner?.name === playerName;
 
+  useEffect(() => {
+    if (!winner) return;
+    playSound(isWinner ? 'win' : 'lose', isWinner ? 0.85 : 0.75);
+  }, [isWinner, winner]);
+
   const handleRematch = () => {
+    playSound('click', 0.65);
     // Usar la ref que capturó el nombre antes de cualquier reset
     const currentName = playerNameRef.current || playerName || 'Jugador';
     console.log('🎮 Revancha con nombre:', currentName);
@@ -199,6 +206,7 @@ export default function GameOverScreen({ navigation }) {
   };
 
   const handleExit = () => {
+    playSound('click', 0.55);
     resetGame();
     socketService.clearReconnectData();
     navigation.navigate('Lobby');

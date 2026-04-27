@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
+import { playSound } from '../services/soundService';
 import useGameStore from '../store/useGameStore';
 
 // ─── Constantes de diseño ─────────────────────────────────────────────────────
@@ -169,6 +170,7 @@ export default function LobbyScreen() {
   };
 
   const switchTab = (t) => {
+    playSound('click', 0.55);
     setTab(t);
     setError(null);
     const targets = { create: 0, join: 1, spectator: 2 };
@@ -199,6 +201,7 @@ export default function LobbyScreen() {
   };
 
   const handleCreate = () => {
+    playSound('click', 0.65);
     if (!validate()) return;
     setError(null);
     setLoading(true);
@@ -217,6 +220,7 @@ export default function LobbyScreen() {
   };
 
   const handleJoin = () => {
+    playSound('click', 0.65);
     if (!validate()) return;
     setError(null);
     setLoading(true);
@@ -232,6 +236,7 @@ export default function LobbyScreen() {
   };
 
   const handleSpectator = () => {
+    playSound('click', 0.65);
     if (!validate()) return;
     setError(null);
     setLoading(true);

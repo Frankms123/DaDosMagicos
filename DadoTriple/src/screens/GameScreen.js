@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
+import { playSound } from '../services/soundService';
 import useGameStore from '../store/useGameStore';
 
 // ─── Colores ──────────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ function PredictionModal({ visible, launchNumber, onPredict }) {
 
   const handleConfirm = () => {
     if (!selected) return;
+    playSound('click', 0.65);
     onPredict(selected);
   };
 
@@ -74,7 +76,10 @@ function PredictionModal({ visible, launchNumber, onPredict }) {
                   { borderColor: opt.color + '50' },
                   selected === opt.key && { backgroundColor: opt.color + '20', borderColor: opt.color },
                 ]}
-                onPress={() => setSelected(opt.key)}
+                onPress={() => {
+                  playSound('click', 0.45);
+                  setSelected(opt.key);
+                }}
                 activeOpacity={0.8}
               >
                 <Text style={styles.predictionEmoji}>{opt.emoji}</Text>
@@ -146,6 +151,7 @@ function Die({ value, index, selected, used, onPress }) {
 
   const handlePress = () => {
     if (used) return;
+    playSound('click', 0.45);
     Animated.sequence([
       Animated.spring(scale, { toValue: 0.85, useNativeDriver: true, speed: 50 }),
       Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 30 }),
@@ -195,6 +201,7 @@ function HiddenDie({ value, color, label, index, selected, used, onPress, canSel
 
   const handlePress = () => {
     if (!canSelect || used) return;
+    playSound('click', 0.45);
     Animated.sequence([
       Animated.spring(scale, { toValue: 0.85, useNativeDriver: true, speed: 50 }),
       Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 30 }),
@@ -308,6 +315,7 @@ export default function GameScreen({ route, navigation }) {
   };
 
   const handlePresent = () => {
+    playSound('click', 0.55);
     if (selectedDiceIndices.length !== 3) {
       Alert.alert('Selecciona 3 dados', 'Debes elegir exactamente 3 dados para presentar.');
       return;
@@ -321,6 +329,7 @@ export default function GameScreen({ route, navigation }) {
         {
           text: 'Presentar',
           onPress: () => {
+            playSound('click', 0.7);
             setPresenting(true);
             setWaitingOthers(true);
             markDiceAsUsed(selectedDiceIndices);
@@ -514,7 +523,14 @@ export default function GameScreen({ route, navigation }) {
 
           {/* Tirar dados — solo primer lanzamiento de cada lance */}
           {gamePhase === 'rolling' && allDice.length === 0 && (
-            <TouchableOpacity style={styles.rollBtn} onPress={() => socketService.rollDice()} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.rollBtn}
+              onPress={() => {
+                playSound('diceRoll', 0.85);
+                socketService.rollDice();
+              }}
+              activeOpacity={0.85}
+            >
               <Text style={styles.rollBtnText}>🎲 Tirar dados</Text>
             </TouchableOpacity>
           )}
