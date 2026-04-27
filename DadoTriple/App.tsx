@@ -108,7 +108,7 @@ function AppNavigator() {
         animationEnabled: true,
       }}
     >
-      {/* Lobby como entrada principal */}
+       {/* Lobby como entrada principal */}
       <Stack.Screen name="Lobby"   component={LobbyScreen} />
 
       {/* Auth */}
