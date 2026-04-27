@@ -1,8 +1,5 @@
 /**
  * RoundResultsScreen.js
- * Muestra los dados presentados de todos los jugadores,
- * manos, puntos de ronda y marcador acumulado.
- * Avanza automáticamente en 10 segundos.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -15,7 +12,8 @@ import { playSound } from '../services/soundService';
 import MagicBackground from '../components/MagicBackground';
 import AnimatedNumber from '../components/AnimatedNumber';
 import DiceFace from '../components/DiceFace';
-import {colors, shadows} from '../theme';
+import { colors, shadows } from '../theme';
+import { Trophy, Medal, Award, CheckCircle2, AlertCircle } from 'lucide-react-native';
 
 // ─── Colores ──────────────────────────────────────────────────────────────────
 const BG     = colors.bg;
@@ -98,7 +96,10 @@ function PlayerRow({ player, rank, isMe, delay }) {
     ]}>
       {/* Posición */}
       <View style={[styles.rankMark, {borderColor: meta.color + '66', backgroundColor: meta.color + '14'}]}>
-        <Text style={[styles.rankMarkText, {color: meta.color}]}>{meta.label}</Text>
+        {rank === 0 ? <Trophy size={16} color={GOLD} /> :
+         rank === 1 ? <Medal size={16} color={meta.color} /> :
+         rank === 2 ? <Award size={16} color={meta.color} /> :
+         <Text style={[styles.rankMarkText, {color: meta.color}]}>{meta.label}</Text>}
       </View>
 
       {/* Info jugador */}
@@ -115,14 +116,15 @@ function PlayerRow({ player, rank, isMe, delay }) {
         </View>
 
         {/* Dados presentados */}
-        <View style={styles.diceRow}>
-          {dice.map((val, i) => (
-            <StaticDie key={i} value={val} color={VALUE_COLOR[val] ?? MUTED} />
-          ))}
-          {dice.length === 0 && (
-            <Text style={styles.noDice}>Sin dados presentados</Text>
-          )}
-        </View>
+        {dice.length === 0 ? (
+          <Text style={styles.noDice}>Sin dados presentados</Text>
+        ) : (
+          <View style={styles.diceRow}>
+            {dice.map((val, i) => (
+              <StaticDie key={i} value={val} color={VALUE_COLOR[Number(val)] ?? MUTED} />
+            ))}
+          </View>
+        )}
       </View>
 
       {/* Puntos */}
@@ -256,10 +258,12 @@ export default function RoundResultsScreen({ route, navigation }) {
               <View style={[
                 styles.predictionResultMark,
                 myResult.predictionHit ? styles.predictionResultMarkHit : styles.predictionResultMarkMiss,
-              ]} />
+              ]}>
+                {myResult.predictionHit ? <CheckCircle2 size={16} color="#fff" /> : <AlertCircle size={16} color="#fff" />}
+              </View>
               <View>
                 <Text style={[styles.predictionResultTitle, { color: myResult.predictionHit ? '#10B981' : '#EF4444' }]}>
-                  {myResult.predictionHit ? '¡Predicción acertada!' : 'Predicción fallida'}
+                  {myResult.predictionHit ? 'Predicción acertada' : 'Predicción fallida'}
                 </Text>
                 {myResult.predictionHit && myResult.bonusPoints > 0 && (
                   <Text style={styles.predictionResultBonus}>+{myResult.bonusPoints} pts bonus</Text>
@@ -460,7 +464,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 10,
     marginTop: 10, alignSelf: 'stretch',
   },
-  predictionResultMark: { width: 14, height: 28, borderRadius: 999 },
+  predictionResultMark: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   predictionResultMarkHit: { backgroundColor: '#10B981' },
   predictionResultMarkMiss: { backgroundColor: '#EF4444' },
   predictionResultTitle: { fontSize: 14, fontWeight: '800' },

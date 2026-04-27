@@ -12,10 +12,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
 import { playSound } from '../services/soundService';
-import useGameStore from '../store/useGameStore';
 import MagicBackground from '../components/MagicBackground';
 import DiceFace from '../components/DiceFace';
-import {colors, shadows} from '../theme';
+import { colors, shadows } from '../theme';
+import { 
+  ArrowLeft, Eye, Trophy, Activity, 
+  Cpu, Target, Zap, Dices, Timer, 
+  AlertCircle, RefreshCw, TrendingUp, BarChart3
+} from 'lucide-react-native';
 
 // ─── Colores ──────────────────────────────────────────────────────────────────
 const BG     = colors.bg;
@@ -62,6 +66,48 @@ function Die({ value }) {
       <Text style={[styles.dieNum, { color: hidden ? BLUE : color }]}>
         {hidden ? 'OCULTO' : value}
       </Text>
+    </View>
+  );
+}
+
+// ─── Componente: Countdown del turno ─────────────────────────────────────────
+function TurnCountdown({ seconds, total }) {
+  const pct = Math.max(0, Math.min(100, (seconds / total) * 100));
+  const color = seconds <= 5 ? RED : GOLD;
+  return (
+    <View style={styles.countdownRow}>
+      <View style={styles.countdownTrack}>
+        <View style={[styles.countdownFill, { width: `${pct}%`, backgroundColor: color }]} />
+      </View>
+      <Text style={[styles.countdownNum, { color }]}>{seconds}s</Text>
+    </View>
+  );
+}
+
+// ─── Componente: Dados disponibles ───────────────────────────────────────────
+function AvailableDice({ allDice, usedDiceIndices }) {
+  const counts = {};
+  for (let i = 1; i <= 6; i++) counts[i] = 0;
+  
+  allDice.forEach((val, i) => {
+    if (!usedDiceIndices.includes(i)) counts[val]++;
+  });
+
+  const available = Object.entries(counts).filter(([_, c]) => c > 0);
+
+  if (available.length === 0) return <Text style={styles.noDice}>Sin dados</Text>;
+
+  return (
+    <View style={styles.availableRow}>
+      {available.map(([val, count]) => {
+        const color = VALUE_COLOR[Number(val)] ?? MUTED;
+        return (
+          <View key={val} style={[styles.diceChip, { borderColor: color + '50' }]}>
+            <Text style={[styles.diceChipCount, { color }]}>{count}x </Text>
+            <DiceFace value={Number(val)} size={12} pipColor={color} faceColor={BG} />
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -260,41 +306,25 @@ export default function SpectatorScreen({ route, navigation }) {
     return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
   }, [currentTurnPlayerId, gamePhase]);
 
-  const addLog = (msg) => {
+  const addLog = (msg, icon = 'Activity') => {
     setLog(prev => [
-      { msg, time: new Date().toLocaleTimeString('es-CR', { hour12: false }) },
+      { msg, icon, time: new Date().toLocaleTimeString('es-CR', { hour12: false }) },
       ...prev,
     ].slice(0, 10));
   };
 
   useEffect(() => {
-    const listeners = [
-      socketService.on('round_started',      (p) => {
-        addLog(`Ronda ${p.round} iniciada`);
-        setPhase('playing');
-      }),
-      socketService.on('dice_rolled',        (p) => addLog('Un jugador tiró sus dados')),
-      socketService.on('dice_selected',      (p) => addLog(`${p.handName}`)),
-      socketService.on('auto_selected',      (p) => addLog(`Auto: ${p.playerName} → ${p.hand}`)),
-      socketService.on('round_ended',        (p) => addLog(`Ronda ${p.round} terminada`)),
-      socketService.on('game_over',          (p) => {
-        addLog(`Ganador: ${p.winner?.name}`);
-        setPhase('finished');
-      }),
-      socketService.on('player_disconnected',(p) => addLog(`${p.disconnectedPlayerName} se desconectó`)),
-      socketService.on('player_reconnected', (p) => addLog(`${p.reconnectedPlayerName} volvió`)),
-    ];
     const offs = [
-      socketService.on('round_started',       (p) => { addLog(`🎲 Ronda ${p.round} iniciada`); }),
-      socketService.on('dice_rolled',         ()  => { addLog(`🎲 Un jugador tiró sus dados`); }),
-      socketService.on('turn_started',        (p) => { addLog(`🎯 Turno de ${p.playerName}`); }),
-      socketService.on('dice_selected',       (p) => { if (p.handName) addLog(`✅ ${p.handName}`); }),
-      socketService.on('auto_selected',       (p) => { addLog(`🤖 Auto: ${p.playerName} → ${p.hand}`); }),
-      socketService.on('prediction_made',     (p) => { addLog(`🔮 ${p.playerName} predijo`); }),
-      socketService.on('round_ended',         (p) => { addLog(`📊 Ronda ${p.round} terminada`); }),
-      socketService.on('game_over',           (p) => { addLog(`🏆 Ganador: ${p.winner?.name}`); }),
-      socketService.on('player_disconnected', (p) => { addLog(`⚠️ ${p.disconnectedPlayerName} se desconectó`); }),
-      socketService.on('player_reconnected',  (p) => { addLog(`🔄 ${p.reconnectedPlayerName} volvió`); }),
+      socketService.on('round_started',       (p) => { addLog(`Ronda ${p.round} iniciada`, 'Dices'); }),
+      socketService.on('dice_rolled',         ()  => { addLog(`Un jugador tiró sus dados`, 'Zap'); }),
+      socketService.on('turn_started',        (p) => { addLog(`Turno de ${p.playerName}`, 'Timer'); }),
+      socketService.on('dice_selected',       (p) => { if (p.handName) addLog(`Mano: ${p.handName}`, 'Target'); }),
+      socketService.on('auto_selected',       (p) => { addLog(`Auto: ${p.playerName} → ${p.hand}`, 'Cpu'); }),
+      socketService.on('prediction_made',     (p) => { addLog(`${p.playerName} predijo`, 'TrendingUp'); }),
+      socketService.on('round_ended',         (p) => { addLog(`Ronda ${p.round} terminada`, 'BarChart3'); }),
+      socketService.on('game_over',           (p) => { addLog(`Ganador: ${p.winner?.name}`, 'Trophy'); }),
+      socketService.on('player_disconnected', (p) => { addLog(`${p.disconnectedPlayerName} se desconectó`, 'AlertCircle'); }),
+      socketService.on('player_reconnected',  (p) => { addLog(`${p.reconnectedPlayerName} volvió`, 'RefreshCw'); }),
     ];
     return () => offs.forEach(off => off());
   }, []);
@@ -330,14 +360,14 @@ export default function SpectatorScreen({ route, navigation }) {
       {/* ── Header fijo ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleExit} style={styles.exitBtn} activeOpacity={0.7}>
-          <Text style={styles.exitBtnText}>← Salir</Text>
+          <ArrowLeft size={20} color={MUTED} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerCode}>{roomCode}</Text>
           <Text style={styles.headerPhase}>{phaseLabel}</Text>
         </View>
         <View style={styles.headerRight}>
-          <View style={styles.eyeMark} />
+          <Eye size={18} color={GOLD} />
           <Text style={styles.specCount}>{spectators.length}</Text>
         </View>
       </View>
@@ -458,6 +488,16 @@ export default function SpectatorScreen({ route, navigation }) {
               {log.map((entry, i) => (
                 <View key={i} style={[styles.logRow, i === 0 && styles.logRowNew]}>
                   <Text style={styles.logTime}>{entry.time}</Text>
+                  <View style={styles.logIconContainer}>
+                    {/* Render dinámico del ícono basado en el string guardado */}
+                    {(() => {
+                      const IconComp = {
+                        Dices, Zap, Timer, Target, Cpu, TrendingUp, 
+                        BarChart3, Trophy, AlertCircle, RefreshCw, Activity
+                      }[entry.icon] || Activity;
+                      return <IconComp size={12} color={PURPLE} />;
+                    })()}
+                  </View>
                   <Text style={styles.logMsg}>{entry.msg}</Text>
                 </View>
               ))}
@@ -673,6 +713,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: BORDER,
   },
   logRowNew: { backgroundColor: PURPLE + '0D' },
-  logTime: { fontSize: 10, color: MUTED, fontFamily: 'monospace', paddingTop: 1 },
+  logTime: { fontSize: 10, color: MUTED, fontFamily: 'monospace', paddingTop: 2, width: 45 },
+  logIconContainer: { width: 20, alignItems: 'center', justifyContent: 'center' },
   logMsg:  { flex: 1, fontSize: 12, color: TEXT, fontWeight: '500' },
 });
