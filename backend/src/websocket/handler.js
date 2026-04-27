@@ -16,7 +16,7 @@ const { persistGameResult } = require('../db/repository');
 const { updatePlayerStats } = require('../db/playerRepository');
 
 const TURN_TIMEOUT_MS        = 30 * 1000;
-const RECONNECT_WINDOW_MS    = 2 * 60 * 1000;
+const RECONNECT_WINDOW_MS    = 3 * 60 * 1000;
 const AUTO_PREDICT_TIMEOUT_MS = 15 * 1000;
 const GAME_START_COUNTDOWN_MS = 3600;
 const ROUND_RESULTS_DELAY_MS  = 10 * 1000;
