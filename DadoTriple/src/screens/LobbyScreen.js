@@ -10,18 +10,23 @@ import {
   Gamepad2, User, ShieldCheck, Share2
 } from 'lucide-react-native';
 import socketService from '../services/socketService';
+import { playSound } from '../services/soundService';
 import useGameStore from '../store/useGameStore';
+import MagicBackground from '../components/MagicBackground';
+import GameButton from '../components/GameButton';
+import DiceFace from '../components/DiceFace';
+import {colors, shadows} from '../theme';
 
 // ─── Constantes de diseño ─────────────────────────────────────────────────────
-const BG = '#0F0F1A';
-const CARD = '#1A1A2E';
-const BORDER = '#2A2A45';
-const TEXT = '#E2E8F0';
-const MUTED = '#64748B';
-const PURPLE = '#7C3AED';
-const GOLD = '#F59E0B';
-const SUCCESS = '#10B981';
-const DANGER = '#EF4444';
+const BG       = colors.bg;
+const CARD     = colors.card;
+const BORDER   = colors.border;
+const TEXT     = colors.text;
+const MUTED    = colors.muted;
+const PURPLE   = colors.purple;
+const GOLD     = colors.gold;
+const SUCCESS  = colors.green;
+const DANGER   = colors.red;
 
 // ─── Componente: Indicador de conexión ───────────────────────────────────────
 function ConnectionDot({ connected }) {
@@ -125,24 +130,59 @@ export default function LobbyScreen() {
     ]).start();
   };
 
+  const switchTab = (t) => {
+    playSound('click', 0.55);
+    setTab(t);
+    setError(null);
+    const targets = { create: 0, join: 1, spectator: 2 };
+    Animated.spring(tabIndicator, {
+      toValue: targets[t],
+      useNativeDriver: false,
+      tension: 80, friction: 12,
+    }).start();
+  };
+
+  const validate = () => {
+    if (!playerName.trim()) {
+      setError('Ingresa tu nombre para continuar');
+      shakeError();
+      return false;
+    }
+    if (playerName.trim().length < 2) {
+      setError('El nombre debe tener al menos 2 caracteres');
+      shakeError();
+      return false;
+    }
+    if ((tab === 'join' || tab === 'spectator') && roomCode.trim().length < 4) {
+      setError('El código de sala debe tener 4 caracteres');
+      shakeError();
+      return false;
+    }
+    return true;
+  };
+
   const handleCreate = () => {
-    const finalName = playerName || localName;
-    if (!finalName.trim()) { shakeError(); return; }
+    playSound('click', 0.65);
+    if (!validate()) return;
+    setError(null);
     setLoading(true);
     socketService.createRoom(finalName.trim(), 4);
     setTimeout(() => setLoading(false), 5000);
   };
 
   const handleJoin = () => {
-    const finalName = playerName || localName;
-    if (!finalName.trim() || roomCode.length < 4) { shakeError(); return; }
+    playSound('click', 0.65);
+    if (!validate()) return;
+    setError(null);
     setLoading(true);
     socketService.joinRoom(roomCode.trim().toUpperCase(), finalName.trim());
     setTimeout(() => setLoading(false), 5000);
   };
 
   const handleSpectator = () => {
-    if (roomCode.length < 4) { shakeError(); return; }
+    playSound('click', 0.65);
+    if (!validate()) return;
+    setError(null);
     setLoading(true);
     const finalName = playerName || localName || 'Espectador';
     socketService.joinAsSpectator(roomCode.trim().toUpperCase(), finalName);
@@ -150,38 +190,43 @@ export default function LobbyScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
-        <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateX: shakeAnim }] }]}>
-          
-          <View style={styles.header}>
-            <View style={styles.logoCircle}>
-              <Dices size={48} color={GOLD} strokeWidth={2.5} />
-            </View>
-            <Text style={styles.title}>Dado Triple</Text>
-            <Text style={styles.subtitle}>EL PLAN DEL DIABLO</Text>
-            
-            <View style={styles.connectionBadge}>
-              <ConnectionDot connected={isConnected} />
-              <Text style={[styles.connectionText, { color: isConnected ? SUCCESS : MUTED }]}>
-                {isConnected ? 'En Línea' : 'Desconectado'}
-              </Text>
-            </View>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <MagicBackground intensity={1.1} />
+      <KeyboardAvoidingView
+        style={styles.root}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {/* ── Header ── */}
+        <Animated.View style={[styles.header, { transform: [{ scale: logoAnim }], opacity: logoAnim }]}>
+          <View style={styles.logoMark}>
+            <DiceFace value={3} size={62} pipColor={GOLD} faceColor={CARD} borderColor={GOLD + '88'} />
+          </View>
+          <Text style={styles.title}>Dado Triple</Text>
+          <Text style={styles.subtitle}>El Plan del Diablo</Text>
+
+          {/* Indicador de conexión */}
+          <View style={styles.connectionRow}>
+            <ConnectionDot connected={isConnected} />
+            <Text style={[styles.connectionText, { color: isConnected ? SUCCESS : MUTED }]}>
+              {isConnected ? 'En Línea' : 'Desconectado'}
+            </Text>
           </View>
 
-          <View style={styles.tabContainer}>
-            {[
-              { id: 'create', label: 'Crear', icon: PlusCircle },
-              { id: 'join', label: 'Unirse', icon: Key },
-              { id: 'spectator', label: 'Ver', icon: Eye },
-            ].map((t) => (
-              <TouchableOpacity 
-                key={t.id}
-                style={[styles.tab, tab === t.id && styles.tabActive]}
-                onPress={() => setTab(t.id)}
-              >
-                <t.icon size={16} color={tab === t.id ? TEXT : MUTED} style={styles.tabIcon} />
-                <Text style={[styles.tabText, tab === t.id && styles.tabTextActive]}>{t.label}</Text>
+        {/* ── Card principal ── */}
+        <Animated.View
+          style={[
+            styles.card,
+            { opacity: cardOpacity, transform: [{ translateY: cardAnim }] },
+          ]}
+        >
+          {/* Tabs */}
+          <View style={styles.tabs}>
+            <Animated.View style={[styles.tabIndicator, { left: indicatorLeft, width: `${tabWidth}%` }]} />
+            {['create', 'join', 'spectator'].map((t) => (
+              <TouchableOpacity key={t} style={styles.tab} onPress={() => switchTab(t)} activeOpacity={0.7}>
+                <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
+                  {t === 'create' ? '+ Crear' : t === 'join' ? '→ Unirse' : 'Ver'}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -239,12 +284,37 @@ export default function LobbyScreen() {
                 </TouchableOpacity>
               )}
             </View>
-          </View>
+          )}
 
-          <View style={styles.footerInfo}>
-            <Share2 size={16} color={PURPLE} style={{ marginBottom: 6 }} />
-            <Text style={styles.footer}>Invita a tus amigos compartiendo el código</Text>
-          </View>
+          {/* Error */}
+          {error && (
+            <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
+              <Text style={styles.errorText}>{error}</Text>
+            </Animated.View>
+          )}
+
+          {/* Botón de acción */}
+          <GameButton
+            style={[
+              styles.actionBtn,
+              tab === 'join'      && styles.actionBtnJoin,
+              tab === 'spectator' && styles.actionBtnSpectator,
+              loading && styles.actionBtnDisabled,
+            ]}
+            onPress={tab === 'create' ? handleCreate : tab === 'join' ? handleJoin : handleSpectator}
+            disabled={loading}
+            sound={null}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.actionBtnText}>
+                {tab === 'create'    ? 'Crear sala'
+                 : tab === 'join'    ? 'Unirse'
+                 : 'Entrar como espectador'}
+              </Text>
+            )}
+          </GameButton>
         </Animated.View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -252,21 +322,36 @@ export default function LobbyScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
-  flex: { flex: 1 },
-  content: { flex: 1, padding: 24, justifyContent: 'center' },
-  header: { alignItems: 'center', marginBottom: 40 },
-  logoCircle: { 
-    width: 100, height: 100, borderRadius: 50, 
-    backgroundColor: CARD, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: BORDER, marginBottom: 16
+  safe: { flex: 1, backgroundColor: BG },
+  root: {
+    flex: 1, backgroundColor: 'transparent',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+
+  // Header
+  header: { alignItems: 'center', marginBottom: 32 },
+  logoMark: {
+    width: 74, height: 74, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: GOLD + '10', borderWidth: 1, borderColor: GOLD + '40', marginBottom: 10,
   },
   title: { fontSize: 32, fontWeight: '900', color: TEXT, letterSpacing: 1 },
-  subtitle: { fontSize: 12, color: MUTED, marginTop: 4, letterSpacing: 4, fontWeight: '700' },
-  connectionBadge: { 
-    flexDirection: 'row', alignItems: 'center', backgroundColor: CARD, 
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginTop: 16,
-    borderWidth: 1, borderColor: BORDER
+  subtitle: { fontSize: 13, color: MUTED, marginTop: 4, letterSpacing: 0.5 },
+  connectionRow: {
+    flexDirection: 'row', alignItems: 'center',
+    marginTop: 14, gap: 8,
+  },
+  dotWrapper: { width: 16, height: 16, alignItems: 'center', justifyContent: 'center' },
+  dotOuter: { position: 'absolute', width: 16, height: 16, borderRadius: 8 },
+  dotInner: { width: 8, height: 8, borderRadius: 4 },
+  connectionText: { fontSize: 12, fontWeight: '600' },
+
+  // Card
+  card: {
+    width: '100%', backgroundColor: CARD,
+    borderRadius: 24, borderWidth: 1, borderColor: BORDER,
+    padding: 22,
+    ...shadows.purple,
   },
   dotWrapper: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   dotOuter: { position: 'absolute', width: 14, height: 14, borderRadius: 7 },
@@ -286,6 +371,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', backgroundColor: BG, 
     padding: 16, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: BORDER 
   },
+  errorText: { fontSize: 13, color: DANGER, fontWeight: '600' },
+
+  // Botón
+  actionBtn: {
+    backgroundColor: PURPLE, borderRadius: 14,
+    paddingVertical: 17, alignItems: 'center',
+    shadowColor: PURPLE, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5, shadowRadius: 12, elevation: 8,
+  },
+  actionBtnJoin:      { backgroundColor: SUCCESS, shadowColor: SUCCESS },
+  actionBtnSpectator: { backgroundColor: GOLD,    shadowColor: GOLD },
+  actionBtnDisabled:  { opacity: 0.55 },
+  actionBtnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+
+  footer: { marginTop: 28, fontSize: 11, color: BORDER },
+});
   userAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: BORDER, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   greetingLabel: { fontSize: 10, fontWeight: '800', color: MUTED, letterSpacing: 1 },
   greetingName: { fontSize: 18, fontWeight: '700', color: TEXT },
