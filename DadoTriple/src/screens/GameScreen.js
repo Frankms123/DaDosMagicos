@@ -1121,15 +1121,20 @@ export default function GameScreen({ route, navigation }) {
                         </View>
                       );
                     })}
-                    {/* Dados ocultos disponibles */}
-                    {!usedSource.includes(9) && diceSource[9] !== undefined && (
-                      <View style={[styles.miniDiceHidden, { borderColor: BLUE + '50', backgroundColor: BLUE + '10' }]}>
-                        <Text style={[styles.miniDiceHiddenText, { color: BLUE }]}>Az</Text>
-                      </View>
-                    )}
-                    {!usedSource.includes(10) && diceSource[10] !== undefined && (
-                      <View style={[styles.miniDiceHidden, { borderColor: RED + '50', backgroundColor: RED + '10' }]}>
-                        <Text style={[styles.miniDiceHiddenText, { color: RED }]}>Ro</Text>
+                    {/* Dados ocultos disponibles — fila separada */}
+                    {((!usedSource.includes(9) && diceSource[9] !== undefined) ||
+                      (!usedSource.includes(10) && diceSource[10] !== undefined)) && (
+                      <View style={styles.miniDiceHiddenRow}>
+                        {!usedSource.includes(9) && diceSource[9] !== undefined && (
+                          <View style={[styles.miniDiceHidden, { borderColor: BLUE + '50', backgroundColor: BLUE + '10' }]}>
+                            <Text style={[styles.miniDiceHiddenText, { color: BLUE }]}>Azul</Text>
+                          </View>
+                        )}
+                        {!usedSource.includes(10) && diceSource[10] !== undefined && (
+                          <View style={[styles.miniDiceHidden, { borderColor: RED + '50', backgroundColor: RED + '10' }]}>
+                            <Text style={[styles.miniDiceHiddenText, { color: RED }]}>Rojo</Text>
+                          </View>
+                        )}
                       </View>
                     )}
                   </View>
@@ -1502,11 +1507,14 @@ const styles = StyleSheet.create({
     flexDirection: 'column', gap: 3, alignItems: 'center',
   },
   miniDiceHidden: {
-    width: 22, height: 22, borderRadius: 6,
+    width: 25, height: 22, borderRadius: 6,
     borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
     marginTop: 3,
   },
   miniDiceHiddenText: { fontSize: 8, fontWeight: '900' },
+  miniDiceHiddenRow: {
+    width: '100%', flexDirection: 'row', gap: 4, marginTop: 4,
+  },
 
   // Bottom sheet prediccion
   bsOverlay: {
