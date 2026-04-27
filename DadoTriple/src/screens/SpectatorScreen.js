@@ -1,12 +1,13 @@
 /**
  * SpectatorScreen.js
- * Pantalla única para espectadores — se actualiza en tiempo real.
- * Muestra dados presentados de todos, estado de ronda y marcador.
+ * Pantalla para espectadores — se actualiza en tiempo real.
+ * Muestra dados disponibles, turno activo, countdown, resumen de predicciones
+ * y ronda dentro del lanzamiento.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  Animated, TouchableOpacity,
+  Animated, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
@@ -22,6 +23,7 @@ const PURPLE = '#7C3AED';
 const GOLD   = '#F59E0B';
 const GREEN  = '#10B981';
 const RED    = '#EF4444';
+const BLUE   = '#3B82F6';
 
 const DICE_FACE   = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 const VALUE_COLOR = { 1:'#94A3B8', 2:'#60A5FA', 3:'#34D399', 4:'#FBBF24', 5:'#F87171', 6:'#A78BFA' };
@@ -33,35 +35,91 @@ const HAND_COLOR = {
   'Par':      '#60A5FA',
   'Nada':     '#64748B',
 };
-
 function getHandColor(name) {
   if (!name) return MUTED;
-  for (const [k, v] of Object.entries(HAND_COLOR)) {
+  for (const [k, v] of Object.entries(HAND_COLOR))
     if (name.startsWith(k)) return v;
-  }
   return MUTED;
 }
 
 // ─── Dado estático ────────────────────────────────────────────────────────────
 function Die({ value }) {
-  const color = VALUE_COLOR[value] ?? MUTED;
+  const color = value === null ? MUTED : (VALUE_COLOR[value] ?? MUTED);
   return (
     <View style={[styles.die, { borderColor: color + '70' }]}>
-      <Text style={[styles.dieEmoji, { color }]}>{DICE_FACE[value] || '?'}</Text>
-      <Text style={[styles.dieNum, { color }]}>{value}</Text>
+      <Text style={[styles.dieEmoji, { color }]}>{value === null ? '?' : (DICE_FACE[value] || '?')}</Text>
+      <Text style={[styles.dieNum,   { color }]}>{value === null ? '?' : value}</Text>
+    </View>
+  );
+}
+
+// ─── Dados disponibles agrupados ─────────────────────────────────────────────
+function AvailableDice({ allDice, usedDiceIndices }) {
+  if (!allDice || allDice.length === 0) return null;
+
+  const visibleDice = allDice.slice(0, 9);
+  const diceByValue = {};
+  visibleDice.forEach((val, i) => {
+    if (usedDiceIndices?.includes(i) || val === null) return;
+    if (!diceByValue[val]) diceByValue[val] = 0;
+    diceByValue[val]++;
+  });
+
+  const hidden0Used = usedDiceIndices?.includes(9);
+  const hidden1Used = usedDiceIndices?.includes(10);
+  const groups = Object.entries(diceByValue).sort((a, b) => Number(a[0]) - Number(b[0]));
+  const hasAny = groups.length > 0 || !hidden0Used || !hidden1Used;
+  if (!hasAny) return <Text style={styles.noDice}>Sin dados disponibles</Text>;
+
+  return (
+    <View style={styles.availableRow}>
+      {groups.map(([val, count]) => (
+        <View key={val} style={styles.diceChip}>
+          <Text style={[styles.diceChipEmoji, { color: VALUE_COLOR[Number(val)] ?? MUTED }]}>
+            {DICE_FACE[Number(val)]}
+          </Text>
+          <Text style={[styles.diceChipCount, { color: VALUE_COLOR[Number(val)] ?? MUTED }]}>
+            ×{count}
+          </Text>
+        </View>
+      ))}
+      {!hidden0Used && (
+        <View style={[styles.diceChip, { backgroundColor: BLUE + '15', borderColor: BLUE + '40' }]}>
+          <Text style={[styles.diceChipEmoji, { color: BLUE }]}>🔵</Text>
+        </View>
+      )}
+      {!hidden1Used && (
+        <View style={[styles.diceChip, { backgroundColor: RED + '15', borderColor: RED + '40' }]}>
+          <Text style={[styles.diceChipEmoji, { color: RED }]}>🔴</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Countdown de turno ───────────────────────────────────────────────────────
+function TurnCountdown({ seconds, total }) {
+  const progress = Math.max(0, seconds / total);
+  const color = seconds <= 5 ? RED : seconds <= 15 ? GOLD : GREEN;
+  return (
+    <View style={styles.countdownRow}>
+      <View style={styles.countdownTrack}>
+        <View style={[styles.countdownFill, { width: `${progress * 100}%`, backgroundColor: color }]} />
+      </View>
+      <Text style={[styles.countdownNum, { color }]}>{seconds}s</Text>
     </View>
   );
 }
 
 // ─── Tarjeta de jugador ───────────────────────────────────────────────────────
-function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
+function PlayerCard({ player, index, roundPhase, roundSnapshot, currentTurnPlayerId, turnCountdown }) {
   const pulse = useRef(new Animated.Value(1)).current;
+  const isTheirTurn = player.id === currentTurnPlayerId && roundPhase === 'selecting';
 
-  // Pulsar cuando el jugador acaba de presentar
   useEffect(() => {
     if (player.hasSelectedDice) {
       Animated.sequence([
-        Animated.spring(pulse, { toValue: 1.04, useNativeDriver: true, speed: 40 }),
+        Animated.spring(pulse, { toValue: 1.03, useNativeDriver: true, speed: 40 }),
         Animated.spring(pulse, { toValue: 1,    useNativeDriver: true, speed: 20 }),
       ]).start();
     }
@@ -71,33 +129,40 @@ function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
   const initial     = player.name?.[0]?.toUpperCase() ?? '?';
   const connected   = player.isConnected !== false;
 
-  // Buscar resultado en el snapshot de la ronda si existe
-  const snapPlayer = roundSnapshot?.players?.find(p => p.id === player.id);
+  const snapPlayer  = roundSnapshot?.players?.find(p => p.id === player.id);
   const dice        = snapPlayer?.presentedDice ?? (player.hasSelectedDice ? player.presentedDice : []);
   const hand        = snapPlayer?.hand ?? (player.hasSelectedDice ? player.hand : null);
   const hColor      = getHandColor(hand?.name);
 
-  // Estado del jugador
-  const statusEmoji = !connected          ? '⚠️'
-    : roundPhase === 'rolling' && !player.hasRolled ? '⏳'
-    : roundPhase === 'rolling' && player.hasRolled  ? '🎲'
-    : player.hasSelectedDice                         ? '✅'
-    : '🤔';
+  const statusEmoji =
+    !connected                                          ? '⚠️'
+    : roundPhase === 'rolling' && !player.hasRolled    ? '⏳'
+    : roundPhase === 'rolling' && player.hasRolled     ? '🎲'
+    : roundPhase === 'predicting' && player.hasPredicted ? '🔮'
+    : roundPhase === 'predicting'                       ? '🤔'
+    : isTheirTurn                                       ? '🎯'
+    : player.hasSelectedDice                            ? '✅'
+    : '⏳';
 
-  const statusLabel = !connected          ? 'Desconectado'
-    : roundPhase === 'rolling' && !player.hasRolled ? 'Tirando...'
-    : roundPhase === 'rolling' && player.hasRolled  ? 'Tiró'
-    : player.hasSelectedDice                         ? hand?.name ?? 'Presentó'
-    : 'Eligiendo...';
+  const statusLabel =
+    !connected                                          ? 'Desconectado'
+    : roundPhase === 'rolling' && !player.hasRolled    ? 'Tirando...'
+    : roundPhase === 'rolling' && player.hasRolled     ? 'Tiró'
+    : roundPhase === 'predicting' && player.hasPredicted ? 'Predicción hecha'
+    : roundPhase === 'predicting'                       ? 'Prediciendo...'
+    : isTheirTurn                                       ? '¡Su turno!'
+    : player.hasSelectedDice                            ? (hand?.name ?? 'Presentó')
+    : 'Esperando turno';
 
   return (
     <Animated.View style={[
       styles.playerCard,
       !connected && styles.playerCardOff,
       player.hasSelectedDice && styles.playerCardDone,
+      isTheirTurn && styles.playerCardTurn,
       { transform: [{ scale: pulse }] },
     ]}>
-      {/* Avatar + nombre */}
+      {/* Header */}
       <View style={styles.playerHeader}>
         <View style={[styles.avatar, { backgroundColor: connected ? avatarColor : MUTED }]}>
           <Text style={styles.avatarText}>{initial}</Text>
@@ -106,7 +171,7 @@ function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
           <Text style={styles.playerName} numberOfLines={1}>{player.name ?? '?'}</Text>
           <View style={styles.statusRow}>
             <Text style={styles.statusEmoji}>{statusEmoji}</Text>
-            <Text style={[styles.statusLabel, player.hasSelectedDice && { color: hColor }]}>
+            <Text style={[styles.statusLabel, isTheirTurn && { color: GOLD }, player.hasSelectedDice && { color: hColor }]}>
               {statusLabel}
             </Text>
           </View>
@@ -116,6 +181,11 @@ function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
           <Text style={styles.scoreUnit}>pts</Text>
         </View>
       </View>
+
+      {/* Countdown cuando es su turno */}
+      {isTheirTurn && turnCountdown !== null && (
+        <TurnCountdown seconds={turnCountdown} total={30} />
+      )}
 
       {/* Dados presentados */}
       {dice.length > 0 && (
@@ -129,7 +199,16 @@ function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
         </View>
       )}
 
-      {/* Puntos de ronda si terminó */}
+      {/* Dados disponibles — cuando no ha presentado */}
+      {!player.hasSelectedDice && (roundPhase === 'predicting' || roundPhase === 'selecting') &&
+        player.allDice?.length > 0 && (
+        <AvailableDice
+          allDice={player.allDice}
+          usedDiceIndices={player.usedDiceIndices ?? []}
+        />
+      )}
+
+      {/* Puntos de ronda */}
       {snapPlayer && (
         <View style={styles.roundPtsRow}>
           <Text style={styles.roundPtsLabel}>Esta ronda:</Text>
@@ -142,6 +221,50 @@ function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
   );
 }
 
+// ─── Resumen de predicciones al final del lanzamiento ────────────────────────
+function LaunchSummary({ snapshot }) {
+  if (!snapshot?.isLastRoundOfLaunch) return null;
+  const players = snapshot.players ?? [];
+  const hasPredictions = players.some(p => p.prediction);
+  if (!hasPredictions) return null;
+
+  return (
+    <View style={styles.launchSummary}>
+      <Text style={styles.launchSummaryTitle}>📊 Resultado del lanzamiento</Text>
+      {players.map(p => {
+        const hit     = p.predictionHit;
+        const bonus   = p.bonusPoints ?? 0;
+        const PRED_LABELS = {
+          high: 'Más de 10 pts 🔥',
+          mid:  '7 a 10 pts ⚡',
+          low:  '1 a 6 pts 🌊',
+          zero: 'Exactamente 0 💀',
+        };
+        return (
+          <View key={p.id} style={[
+            styles.summaryRow,
+            hit === true  && styles.summaryRowHit,
+            hit === false && styles.summaryRowMiss,
+          ]}>
+            <Text style={styles.summaryName} numberOfLines={1}>{p.name}</Text>
+            <View style={{ flex: 1 }}>
+              {p.prediction && (
+                <Text style={styles.summaryPred}>{PRED_LABELS[p.prediction] ?? p.prediction}</Text>
+              )}
+              <Text style={[styles.summaryResult, { color: hit ? GREEN : hit === false ? RED : MUTED }]}>
+                {hit === true  ? `✅ Acertó  +${bonus > 0 ? bonus : 0} bonus` :
+                 hit === false ? '❌ Falló' :
+                 '—'}
+              </Text>
+            </View>
+            <Text style={[styles.summaryPts, { color: GOLD }]}>{p.launchPoints} pts</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // ─── Pantalla principal ───────────────────────────────────────────────────────
 export default function SpectatorScreen({ route, navigation }) {
   const { roomCode } = route.params ?? {};
@@ -151,12 +274,17 @@ export default function SpectatorScreen({ route, navigation }) {
   const gamePhase     = useGameStore(s => s.gamePhase);
   const roundNumber   = useGameStore(s => s.roundNumber);
   const totalRounds   = useGameStore(s => s.totalRounds);
+  const launchNumber  = useGameStore(s => s.launchNumber);
   const roomState     = useGameStore(s => s.roomState);
   const roundSnapshot = useGameStore(s => s.roundSnapshot);
   const gameOver      = useGameStore(s => s.gameOver);
+  const currentTurnPlayerId = useGameStore(s => s.currentTurnPlayerId);
 
-  const [phase, setPhase] = useState('waiting'); // waiting | playing | finished
-  const [log, setLog]     = useState([]);
+  const [log,            setLog]            = useState([]);
+  const [turnCountdown,  setTurnCountdown]  = useState(null);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [lastSummary,    setLastSummary]    = useState(null);
+  const countdownRef = useRef(null);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
 
@@ -164,29 +292,54 @@ export default function SpectatorScreen({ route, navigation }) {
     Animated.timing(headerAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, [roundNumber, gamePhase]);
 
-  // Log de eventos en tiempo real
+  // Guardar último resumen de lanzamiento
+  useEffect(() => {
+    if (roundSnapshot?.isLastRoundOfLaunch) setLastSummary(roundSnapshot);
+  }, [roundSnapshot]);
+
+  // Countdown de turno activo
+  useEffect(() => {
+    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+    if (currentTurnPlayerId && gamePhase === 'selecting') {
+      setTurnCountdown(30);
+      countdownRef.current = setInterval(() => {
+        setTurnCountdown(prev => {
+          if (prev === null || prev <= 1) { clearInterval(countdownRef.current); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      setTurnCountdown(null);
+    }
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, [currentTurnPlayerId, gamePhase]);
+
   const addLog = (msg) => {
-    setLog(prev => [{ msg, time: new Date().toLocaleTimeString('es-CR', { hour12: false }) }, ...prev].slice(0, 8));
+    setLog(prev => [
+      { msg, time: new Date().toLocaleTimeString('es-CR', { hour12: false }) },
+      ...prev,
+    ].slice(0, 10));
   };
 
   useEffect(() => {
-    const listeners = [
-      socketService.on('round_started',      (p) => {
-        addLog(`🎲 Ronda ${p.round} iniciada`);
-        setPhase('playing');
-      }),
-      socketService.on('dice_rolled',        (p) => addLog(`🎲 Un jugador tiró sus dados`)),
-      socketService.on('dice_selected',      (p) => addLog(`✅ ${p.handName}`)),
-      socketService.on('auto_selected',      (p) => addLog(`🤖 Auto: ${p.playerName} → ${p.hand}`)),
-      socketService.on('round_ended',        (p) => addLog(`📊 Ronda ${p.round} terminada`)),
-      socketService.on('game_over',          (p) => {
-        addLog(`🏆 Ganador: ${p.winner?.name}`);
-        setPhase('finished');
-      }),
-      socketService.on('player_disconnected',(p) => addLog(`⚠️ ${p.disconnectedPlayerName} se desconectó`)),
-      socketService.on('player_reconnected', (p) => addLog(`🔄 ${p.reconnectedPlayerName} volvió`)),
+    const offs = [
+      socketService.on('round_started',       (p) => { addLog(`🎲 Ronda ${p.round} iniciada`); }),
+      socketService.on('dice_rolled',         ()  => { addLog(`🎲 Un jugador tiró sus dados`); }),
+      socketService.on('turn_started',        (p) => { addLog(`🎯 Turno de ${p.playerName}`); }),
+      socketService.on('dice_selected',       (p) => { if (p.handName) addLog(`✅ ${p.handName}`); }),
+      socketService.on('auto_selected',       (p) => { addLog(`🤖 Auto: ${p.playerName} → ${p.hand}`); }),
+      socketService.on('prediction_made',     (p) => { addLog(`🔮 ${p.playerName} predijo`); }),
+      socketService.on('round_ended',         (p) => { addLog(`📊 Ronda ${p.round} terminada`); }),
+      socketService.on('game_over',           (p) => { addLog(`🏆 Ganador: ${p.winner?.name}`); }),
+      socketService.on('player_disconnected', (p) => { addLog(`⚠️ ${p.disconnectedPlayerName} se desconectó`); }),
+      socketService.on('player_reconnected',  (p) => { addLog(`🔄 ${p.reconnectedPlayerName} volvió`); }),
     ];
-    return () => listeners.forEach(off => off());
+    return () => offs.forEach(off => off());
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
   }, []);
 
   const handleExit = () => {
@@ -195,19 +348,23 @@ export default function SpectatorScreen({ route, navigation }) {
     navigation.navigate('Lobby');
   };
 
-  // Marcador ordenado
   const scoreboard = [...players].sort((a, b) => (b.totalPoints ?? 0) - (a.totalPoints ?? 0));
 
+  // Ronda dentro del lanzamiento
+  const roundInLaunch = roundNumber > 0 ? ((roundNumber - 1) % 3) + 1 : 0;
+
   const phaseLabel = {
-    waiting:   '⏳ Esperando jugadores',
-    rolling:   '🎲 Tirando dados',
-    selecting: '🃏 Eligiendo dados',
-    scoring:   '📊 Calculando',
-    finished:  '🏁 Fin de partida',
+    waiting:    '⏳ Esperando jugadores',
+    rolling:    '🎲 Tirando dados',
+    predicting: '🔮 Prediciendo',
+    selecting:  '🃏 Eligiendo dados',
+    scoring:    '📊 Calculando',
+    finished:   '🏁 Fin de partida',
   }[gamePhase] ?? '⏳ Esperando';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+
       {/* ── Header fijo ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleExit} style={styles.exitBtn} activeOpacity={0.7}>
@@ -223,25 +380,53 @@ export default function SpectatorScreen({ route, navigation }) {
         </View>
       </View>
 
-      {/* Barra de ronda */}
+      {/* ── Barra de progreso ── */}
       {roundNumber > 0 && (
-        <Animated.View style={[styles.roundBar, { opacity: headerAnim }]}>
-          <Text style={styles.roundBarText}>
-            RONDA {roundNumber} / {totalRounds}
-          </Text>
-          <View style={styles.roundProgress}>
-            {Array.from({ length: totalRounds }).map((_, i) => (
-              <View
-                key={i}
-                style={[styles.roundDot, i < roundNumber && styles.roundDotActive]}
-              />
-            ))}
+        <Animated.View style={[styles.progressBar, { opacity: headerAnim }]}>
+          {/* Lanzamiento + ronda */}
+          <View style={styles.progressLeft}>
+            <Text style={styles.progressLaunch}>LANCE {launchNumber}/3</Text>
+            <Text style={styles.progressRound}>
+              Ronda <Text style={styles.progressRoundBold}>{roundInLaunch}</Text>/3
+            </Text>
           </View>
+
+          {/* Dots de 9 rondas */}
+          <View style={styles.dotsRow}>
+            {Array.from({ length: 9 }).map((_, i) => {
+              const isCurrentLaunch = Math.floor(i / 3) + 1 === launchNumber;
+              const isPlayed = i < roundNumber - 1;
+              const isCurrent = i === roundNumber - 1;
+              return (
+                <View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    isPlayed  && styles.dotPlayed,
+                    isCurrent && styles.dotCurrent,
+                    i % 3 === 2 && i < 8 && styles.dotSpacer,
+                  ]}
+                />
+              );
+            })}
+          </View>
+
+          <Text style={styles.progressTotal}>R{roundNumber}/{totalRounds}</Text>
         </Animated.View>
       )}
 
-      <ScrollView style={styles.root} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
+      <ScrollView
+        style={styles.root}
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={PURPLE}
+          />
+        }
+      >
         {/* ── Jugadores ── */}
         {players.length > 0 ? (
           <View style={styles.section}>
@@ -252,8 +437,10 @@ export default function SpectatorScreen({ route, navigation }) {
                   key={p.id}
                   player={p}
                   index={i}
-                  roundPhase={roomState?.roundPhase}
+                  roundPhase={roomState?.roundPhase ?? gamePhase}
                   roundSnapshot={roundSnapshot}
+                  currentTurnPlayerId={currentTurnPlayerId}
+                  turnCountdown={p.id === currentTurnPlayerId ? turnCountdown : null}
                 />
               ))}
             </View>
@@ -264,6 +451,11 @@ export default function SpectatorScreen({ route, navigation }) {
             <Text style={styles.emptyTitle}>Observando sala {roomCode}</Text>
             <Text style={styles.emptyText}>Esperando que la partida comience...</Text>
           </View>
+        )}
+
+        {/* ── Resumen del último lanzamiento ── */}
+        {lastSummary && gamePhase !== 'rolling' && (
+          <LaunchSummary snapshot={lastSummary} />
         )}
 
         {/* ── Marcador ── */}
@@ -296,7 +488,7 @@ export default function SpectatorScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* ── Log de eventos ── */}
+        {/* ── Log de actividad ── */}
         {log.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>ACTIVIDAD</Text>
@@ -324,44 +516,45 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: CARD, borderBottomWidth: 1,
-    borderBottomColor: BORDER, paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderBottomColor: BORDER, paddingHorizontal: 16, paddingVertical: 12,
   },
-  exitBtn: { width: 60 },
-  exitBtnText: { color: MUTED, fontSize: 14, fontWeight: '600' },
+  exitBtn:      { width: 60 },
+  exitBtnText:  { color: MUTED, fontSize: 14, fontWeight: '600' },
   headerCenter: { flex: 1, alignItems: 'center' },
-  headerCode: { fontSize: 20, fontWeight: '900', color: GOLD, letterSpacing: 4 },
-  headerPhase: { fontSize: 11, color: PURPLE, fontWeight: '700', marginTop: 2 },
-  headerRight: { width: 60, alignItems: 'flex-end' },
-  eyeIcon: { fontSize: 16 },
-  specCount: { fontSize: 11, color: MUTED },
+  headerCode:   { fontSize: 20, fontWeight: '900', color: GOLD, letterSpacing: 4 },
+  headerPhase:  { fontSize: 11, color: PURPLE, fontWeight: '700', marginTop: 2 },
+  headerRight:  { width: 60, alignItems: 'flex-end' },
+  eyeIcon:      { fontSize: 16 },
+  specCount:    { fontSize: 11, color: MUTED },
 
-  // Barra de ronda
-  roundBar: {
+  // Barra de progreso
+  progressBar: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: PURPLE + '18',
-    paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: PURPLE + '15',
+    paddingHorizontal: 16, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: PURPLE + '30',
     gap: 12,
   },
-  roundBarText: { fontSize: 11, fontWeight: '700', color: PURPLE, letterSpacing: 1 },
-  roundProgress: { flexDirection: 'row', gap: 6 },
-  roundDot: {
+  progressLeft: { alignItems: 'flex-start', minWidth: 64 },
+  progressLaunch: { fontSize: 9, fontWeight: '800', color: PURPLE, letterSpacing: 2 },
+  progressRound:  { fontSize: 12, color: MUTED, marginTop: 1 },
+  progressRoundBold: { fontWeight: '800', color: TEXT },
+  dotsRow:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  dot: {
     width: 8, height: 8, borderRadius: 4, backgroundColor: BORDER,
   },
-  roundDotActive: { backgroundColor: PURPLE },
+  dotPlayed:  { backgroundColor: PURPLE + '70' },
+  dotCurrent: { backgroundColor: PURPLE, width: 10, height: 10, borderRadius: 5 },
+  dotSpacer:  { marginRight: 6 },
+  progressTotal: { fontSize: 11, color: MUTED, fontWeight: '600', minWidth: 40, textAlign: 'right' },
 
   root:   { flex: 1 },
   scroll: { paddingHorizontal: 14, paddingTop: 14 },
 
-  // Sección
-  section: { marginBottom: 20 },
-  sectionLabel: {
-    fontSize: 9, fontWeight: '700', color: MUTED,
-    letterSpacing: 2, marginBottom: 10,
-  },
+  section:      { marginBottom: 20 },
+  sectionLabel: { fontSize: 9, fontWeight: '700', color: MUTED, letterSpacing: 2, marginBottom: 10 },
 
-  // Lista jugadores
+  // Tarjeta jugador
   playersList: { gap: 10 },
   playerCard: {
     backgroundColor: CARD, borderRadius: 16,
@@ -369,22 +562,32 @@ const styles = StyleSheet.create({
   },
   playerCardOff:  { opacity: 0.45 },
   playerCardDone: { borderColor: GREEN + '40' },
+  playerCardTurn: { borderColor: GOLD + '80', backgroundColor: GOLD + '08' },
 
   playerHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: {
     width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontSize: 18, fontWeight: '800', color: '#fff' },
-  playerMeta: { flex: 1 },
-  playerName: { fontSize: 15, fontWeight: '700', color: TEXT },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  statusEmoji: { fontSize: 12 },
-  statusLabel: { fontSize: 11, color: MUTED, fontWeight: '600' },
-  scoreBox: { alignItems: 'flex-end' },
-  scoreValue: { fontSize: 20, fontWeight: '900', color: GOLD },
-  scoreUnit: { fontSize: 10, color: MUTED },
+  avatarText:   { fontSize: 18, fontWeight: '800', color: '#fff' },
+  playerMeta:   { flex: 1 },
+  playerName:   { fontSize: 15, fontWeight: '700', color: TEXT },
+  statusRow:    { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  statusEmoji:  { fontSize: 12 },
+  statusLabel:  { fontSize: 11, color: MUTED, fontWeight: '600' },
+  scoreBox:     { alignItems: 'flex-end' },
+  scoreValue:   { fontSize: 20, fontWeight: '900', color: GOLD },
+  scoreUnit:    { fontSize: 10, color: MUTED },
 
+  // Countdown
+  countdownRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  countdownTrack: {
+    flex: 1, height: 4, backgroundColor: BORDER, borderRadius: 2, overflow: 'hidden',
+  },
+  countdownFill: { height: 4, borderRadius: 2 },
+  countdownNum:  { fontSize: 11, fontWeight: '800', minWidth: 26, textAlign: 'right' },
+
+  // Dados
   diceRow: {
     flexDirection: 'row', alignItems: 'center',
     gap: 8, marginTop: 12, flexWrap: 'wrap',
@@ -396,19 +599,54 @@ const styles = StyleSheet.create({
   },
   dieEmoji: { fontSize: 17 },
   dieNum:   { fontSize: 9, fontWeight: '800', marginTop: 1 },
-
   handTag: {
     borderRadius: 8, borderWidth: 1,
     paddingHorizontal: 10, paddingVertical: 4,
   },
   handTagText: { fontSize: 11, fontWeight: '700' },
 
+  // Dados disponibles
+  availableRow: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: 5, marginTop: 10,
+  },
+  diceChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: BG, borderRadius: 8, borderWidth: 1, borderColor: BORDER,
+    paddingHorizontal: 7, paddingVertical: 3,
+  },
+  diceChipEmoji: { fontSize: 13 },
+  diceChipCount: { fontSize: 9, fontWeight: '800' },
+  noDice: { fontSize: 10, color: MUTED, fontStyle: 'italic', marginTop: 6 },
+
   roundPtsRow: {
     flexDirection: 'row', justifyContent: 'flex-end',
-    alignItems: 'center', gap: 6, marginTop: 8,
+    alignItems: 'center', gap: 6, marginTop: 10,
   },
   roundPtsLabel: { fontSize: 11, color: MUTED },
   roundPtsValue: { fontSize: 14, fontWeight: '800' },
+
+  // Resumen lanzamiento
+  launchSummary: {
+    backgroundColor: CARD, borderRadius: 16,
+    borderWidth: 1.5, borderColor: PURPLE + '40',
+    padding: 14, marginBottom: 20,
+  },
+  launchSummaryTitle: {
+    fontSize: 11, fontWeight: '800', color: PURPLE,
+    letterSpacing: 1, marginBottom: 10,
+  },
+  summaryRow: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 10, paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: BORDER,
+  },
+  summaryRowHit:  { backgroundColor: GREEN  + '08' },
+  summaryRowMiss: { backgroundColor: RED    + '08' },
+  summaryName:    { fontSize: 13, fontWeight: '700', color: TEXT, width: 80 },
+  summaryPred:    { fontSize: 10, color: MUTED },
+  summaryResult:  { fontSize: 11, fontWeight: '700', marginTop: 2 },
+  summaryPts:     { fontSize: 16, fontWeight: '900', marginLeft: 'auto' },
 
   // Estado vacío
   emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
@@ -427,9 +665,9 @@ const styles = StyleSheet.create({
     gap: 12, borderBottomWidth: 1, borderBottomColor: BORDER,
   },
   scoreRowFirst: { backgroundColor: GOLD + '08' },
-  scoreMedal: { fontSize: 18, width: 28 },
-  scoreName:  { flex: 1, fontSize: 14, fontWeight: '700', color: TEXT },
-  scoreTotal: { fontSize: 16, fontWeight: '800', color: MUTED },
+  scoreMedal:    { fontSize: 18, width: 28 },
+  scoreName:     { flex: 1, fontSize: 14, fontWeight: '700', color: TEXT },
+  scoreTotal:    { fontSize: 16, fontWeight: '800', color: MUTED },
 
   // Game over
   gameOverCard: {
@@ -454,6 +692,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: BORDER,
   },
   logRowNew: { backgroundColor: PURPLE + '0D' },
-  logTime: { fontSize: 10, color: MUTED, fontFamily: 'monospace', paddingTop: 1 },
-  logMsg:  { flex: 1, fontSize: 12, color: TEXT, fontWeight: '500' },
+  logTime:   { fontSize: 10, color: MUTED, fontFamily: 'monospace', paddingTop: 1 },
+  logMsg:    { flex: 1, fontSize: 12, color: TEXT, fontWeight: '500' },
 });

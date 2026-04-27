@@ -6,8 +6,7 @@
  * Protocolo del cliente:  { type: string, payload: object }
  */
 
-const WS_URL = 'ws://192.168.0.10:3000'; // ← cambiar por IP del servidor
-const WS_URL_PROD = 'wss://dado-triple-backend.onrender.com'; // URL de producción (con SSL)
+const WS_URL = 'wss://dado-triple-backend.onrender.com'; // 'ws://localhost:3000';
 
 class SocketService {
   constructor() {
