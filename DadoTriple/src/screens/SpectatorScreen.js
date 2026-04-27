@@ -1,12 +1,13 @@
 /**
  * SpectatorScreen.js
- * Pantalla única para espectadores — se actualiza en tiempo real.
- * Muestra dados presentados de todos, estado de ronda y marcador.
+ * Pantalla para espectadores — se actualiza en tiempo real.
+ * Muestra dados disponibles, turno activo, countdown, resumen de predicciones
+ * y ronda dentro del lanzamiento.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  Animated, TouchableOpacity,
+  Animated, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
@@ -36,12 +37,10 @@ const HAND_COLOR = {
   'Par':      '#60A5FA',
   'Nada':     '#64748B',
 };
-
 function getHandColor(name) {
   if (!name) return MUTED;
-  for (const [k, v] of Object.entries(HAND_COLOR)) {
+  for (const [k, v] of Object.entries(HAND_COLOR))
     if (name.startsWith(k)) return v;
-  }
   return MUTED;
 }
 
@@ -67,14 +66,14 @@ function Die({ value }) {
 }
 
 // ─── Tarjeta de jugador ───────────────────────────────────────────────────────
-function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
+function PlayerCard({ player, index, roundPhase, roundSnapshot, currentTurnPlayerId, turnCountdown }) {
   const pulse = useRef(new Animated.Value(1)).current;
+  const isTheirTurn = player.id === currentTurnPlayerId && roundPhase === 'selecting';
 
-  // Pulsar cuando el jugador acaba de presentar
   useEffect(() => {
     if (player.hasSelectedDice) {
       Animated.sequence([
-        Animated.spring(pulse, { toValue: 1.04, useNativeDriver: true, speed: 40 }),
+        Animated.spring(pulse, { toValue: 1.03, useNativeDriver: true, speed: 40 }),
         Animated.spring(pulse, { toValue: 1,    useNativeDriver: true, speed: 20 }),
       ]).start();
     }
@@ -84,8 +83,7 @@ function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
   const initial     = player.name?.[0]?.toUpperCase() ?? '?';
   const connected   = player.isConnected !== false;
 
-  // Buscar resultado en el snapshot de la ronda si existe
-  const snapPlayer = roundSnapshot?.players?.find(p => p.id === player.id);
+  const snapPlayer  = roundSnapshot?.players?.find(p => p.id === player.id);
   const dice        = snapPlayer?.presentedDice ?? (player.hasSelectedDice ? player.presentedDice : []);
   const hand        = snapPlayer?.hand ?? (player.hasSelectedDice ? player.hand : null);
   const hColor      = getHandColor(hand?.name);
@@ -106,9 +104,10 @@ function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
       styles.playerCard,
       !connected && styles.playerCardOff,
       player.hasSelectedDice && styles.playerCardDone,
+      isTheirTurn && styles.playerCardTurn,
       { transform: [{ scale: pulse }] },
     ]}>
-      {/* Avatar + nombre */}
+      {/* Header */}
       <View style={styles.playerHeader}>
         <View style={[styles.avatar, { backgroundColor: connected ? avatarColor : MUTED }]}>
           <Text style={styles.avatarText}>{initial}</Text>
@@ -128,6 +127,11 @@ function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
         </View>
       </View>
 
+      {/* Countdown cuando es su turno */}
+      {isTheirTurn && turnCountdown !== null && (
+        <TurnCountdown seconds={turnCountdown} total={30} />
+      )}
+
       {/* Dados presentados */}
       {dice.length > 0 && (
         <View style={styles.diceRow}>
@@ -140,7 +144,16 @@ function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
         </View>
       )}
 
-      {/* Puntos de ronda si terminó */}
+      {/* Dados disponibles — cuando no ha presentado */}
+      {!player.hasSelectedDice && (roundPhase === 'predicting' || roundPhase === 'selecting') &&
+        player.allDice?.length > 0 && (
+        <AvailableDice
+          allDice={player.allDice}
+          usedDiceIndices={player.usedDiceIndices ?? []}
+        />
+      )}
+
+      {/* Puntos de ronda */}
       {snapPlayer && (
         <View style={styles.roundPtsRow}>
           <Text style={styles.roundPtsLabel}>Esta ronda:</Text>
@@ -153,6 +166,50 @@ function PlayerCard({ player, index, roundPhase, roundSnapshot }) {
   );
 }
 
+// ─── Resumen de predicciones al final del lanzamiento ────────────────────────
+function LaunchSummary({ snapshot }) {
+  if (!snapshot?.isLastRoundOfLaunch) return null;
+  const players = snapshot.players ?? [];
+  const hasPredictions = players.some(p => p.prediction);
+  if (!hasPredictions) return null;
+
+  return (
+    <View style={styles.launchSummary}>
+      <Text style={styles.launchSummaryTitle}>📊 Resultado del lanzamiento</Text>
+      {players.map(p => {
+        const hit     = p.predictionHit;
+        const bonus   = p.bonusPoints ?? 0;
+        const PRED_LABELS = {
+          high: 'Más de 10 pts 🔥',
+          mid:  '7 a 10 pts ⚡',
+          low:  '1 a 6 pts 🌊',
+          zero: 'Exactamente 0 💀',
+        };
+        return (
+          <View key={p.id} style={[
+            styles.summaryRow,
+            hit === true  && styles.summaryRowHit,
+            hit === false && styles.summaryRowMiss,
+          ]}>
+            <Text style={styles.summaryName} numberOfLines={1}>{p.name}</Text>
+            <View style={{ flex: 1 }}>
+              {p.prediction && (
+                <Text style={styles.summaryPred}>{PRED_LABELS[p.prediction] ?? p.prediction}</Text>
+              )}
+              <Text style={[styles.summaryResult, { color: hit ? GREEN : hit === false ? RED : MUTED }]}>
+                {hit === true  ? `✅ Acertó  +${bonus > 0 ? bonus : 0} bonus` :
+                 hit === false ? '❌ Falló' :
+                 '—'}
+              </Text>
+            </View>
+            <Text style={[styles.summaryPts, { color: GOLD }]}>{p.launchPoints} pts</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // ─── Pantalla principal ───────────────────────────────────────────────────────
 export default function SpectatorScreen({ route, navigation }) {
   const { roomCode } = route.params ?? {};
@@ -162,12 +219,17 @@ export default function SpectatorScreen({ route, navigation }) {
   const gamePhase     = useGameStore(s => s.gamePhase);
   const roundNumber   = useGameStore(s => s.roundNumber);
   const totalRounds   = useGameStore(s => s.totalRounds);
+  const launchNumber  = useGameStore(s => s.launchNumber);
   const roomState     = useGameStore(s => s.roomState);
   const roundSnapshot = useGameStore(s => s.roundSnapshot);
   const gameOver      = useGameStore(s => s.gameOver);
+  const currentTurnPlayerId = useGameStore(s => s.currentTurnPlayerId);
 
-  const [phase, setPhase] = useState('waiting'); // waiting | playing | finished
-  const [log, setLog]     = useState([]);
+  const [log,            setLog]            = useState([]);
+  const [turnCountdown,  setTurnCountdown]  = useState(null);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [lastSummary,    setLastSummary]    = useState(null);
+  const countdownRef = useRef(null);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
 
@@ -175,9 +237,33 @@ export default function SpectatorScreen({ route, navigation }) {
     Animated.timing(headerAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, [roundNumber, gamePhase]);
 
-  // Log de eventos en tiempo real
+  // Guardar último resumen de lanzamiento
+  useEffect(() => {
+    if (roundSnapshot?.isLastRoundOfLaunch) setLastSummary(roundSnapshot);
+  }, [roundSnapshot]);
+
+  // Countdown de turno activo
+  useEffect(() => {
+    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+    if (currentTurnPlayerId && gamePhase === 'selecting') {
+      setTurnCountdown(30);
+      countdownRef.current = setInterval(() => {
+        setTurnCountdown(prev => {
+          if (prev === null || prev <= 1) { clearInterval(countdownRef.current); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      setTurnCountdown(null);
+    }
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, [currentTurnPlayerId, gamePhase]);
+
   const addLog = (msg) => {
-    setLog(prev => [{ msg, time: new Date().toLocaleTimeString('es-CR', { hour12: false }) }, ...prev].slice(0, 8));
+    setLog(prev => [
+      { msg, time: new Date().toLocaleTimeString('es-CR', { hour12: false }) },
+      ...prev,
+    ].slice(0, 10));
   };
 
   useEffect(() => {
@@ -197,7 +283,24 @@ export default function SpectatorScreen({ route, navigation }) {
       socketService.on('player_disconnected',(p) => addLog(`${p.disconnectedPlayerName} se desconectó`)),
       socketService.on('player_reconnected', (p) => addLog(`${p.reconnectedPlayerName} volvió`)),
     ];
-    return () => listeners.forEach(off => off());
+    const offs = [
+      socketService.on('round_started',       (p) => { addLog(`🎲 Ronda ${p.round} iniciada`); }),
+      socketService.on('dice_rolled',         ()  => { addLog(`🎲 Un jugador tiró sus dados`); }),
+      socketService.on('turn_started',        (p) => { addLog(`🎯 Turno de ${p.playerName}`); }),
+      socketService.on('dice_selected',       (p) => { if (p.handName) addLog(`✅ ${p.handName}`); }),
+      socketService.on('auto_selected',       (p) => { addLog(`🤖 Auto: ${p.playerName} → ${p.hand}`); }),
+      socketService.on('prediction_made',     (p) => { addLog(`🔮 ${p.playerName} predijo`); }),
+      socketService.on('round_ended',         (p) => { addLog(`📊 Ronda ${p.round} terminada`); }),
+      socketService.on('game_over',           (p) => { addLog(`🏆 Ganador: ${p.winner?.name}`); }),
+      socketService.on('player_disconnected', (p) => { addLog(`⚠️ ${p.disconnectedPlayerName} se desconectó`); }),
+      socketService.on('player_reconnected',  (p) => { addLog(`🔄 ${p.reconnectedPlayerName} volvió`); }),
+    ];
+    return () => offs.forEach(off => off());
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
   }, []);
 
   const handleExit = () => {
@@ -207,8 +310,10 @@ export default function SpectatorScreen({ route, navigation }) {
     navigation.navigate('Lobby');
   };
 
-  // Marcador ordenado
   const scoreboard = [...players].sort((a, b) => (b.totalPoints ?? 0) - (a.totalPoints ?? 0));
+
+  // Ronda dentro del lanzamiento
+  const roundInLaunch = roundNumber > 0 ? ((roundNumber - 1) % 3) + 1 : 0;
 
   const phaseLabel = {
     waiting:   'Esperando jugadores',
@@ -236,25 +341,53 @@ export default function SpectatorScreen({ route, navigation }) {
         </View>
       </View>
 
-      {/* Barra de ronda */}
+      {/* ── Barra de progreso ── */}
       {roundNumber > 0 && (
-        <Animated.View style={[styles.roundBar, { opacity: headerAnim }]}>
-          <Text style={styles.roundBarText}>
-            RONDA {roundNumber} / {totalRounds}
-          </Text>
-          <View style={styles.roundProgress}>
-            {Array.from({ length: totalRounds }).map((_, i) => (
-              <View
-                key={i}
-                style={[styles.roundDot, i < roundNumber && styles.roundDotActive]}
-              />
-            ))}
+        <Animated.View style={[styles.progressBar, { opacity: headerAnim }]}>
+          {/* Lanzamiento + ronda */}
+          <View style={styles.progressLeft}>
+            <Text style={styles.progressLaunch}>LANCE {launchNumber}/3</Text>
+            <Text style={styles.progressRound}>
+              Ronda <Text style={styles.progressRoundBold}>{roundInLaunch}</Text>/3
+            </Text>
           </View>
+
+          {/* Dots de 9 rondas */}
+          <View style={styles.dotsRow}>
+            {Array.from({ length: 9 }).map((_, i) => {
+              const isCurrentLaunch = Math.floor(i / 3) + 1 === launchNumber;
+              const isPlayed = i < roundNumber - 1;
+              const isCurrent = i === roundNumber - 1;
+              return (
+                <View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    isPlayed  && styles.dotPlayed,
+                    isCurrent && styles.dotCurrent,
+                    i % 3 === 2 && i < 8 && styles.dotSpacer,
+                  ]}
+                />
+              );
+            })}
+          </View>
+
+          <Text style={styles.progressTotal}>R{roundNumber}/{totalRounds}</Text>
         </Animated.View>
       )}
 
-      <ScrollView style={styles.root} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
+      <ScrollView
+        style={styles.root}
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={PURPLE}
+          />
+        }
+      >
         {/* ── Jugadores ── */}
         {players.length > 0 ? (
           <View style={styles.section}>
@@ -265,8 +398,10 @@ export default function SpectatorScreen({ route, navigation }) {
                   key={p.id}
                   player={p}
                   index={i}
-                  roundPhase={roomState?.roundPhase}
+                  roundPhase={roomState?.roundPhase ?? gamePhase}
                   roundSnapshot={roundSnapshot}
+                  currentTurnPlayerId={currentTurnPlayerId}
+                  turnCountdown={p.id === currentTurnPlayerId ? turnCountdown : null}
                 />
               ))}
             </View>
@@ -277,6 +412,11 @@ export default function SpectatorScreen({ route, navigation }) {
             <Text style={styles.emptyTitle}>Observando sala {roomCode}</Text>
             <Text style={styles.emptyText}>Esperando que la partida comience...</Text>
           </View>
+        )}
+
+        {/* ── Resumen del último lanzamiento ── */}
+        {lastSummary && gamePhase !== 'rolling' && (
+          <LaunchSummary snapshot={lastSummary} />
         )}
 
         {/* ── Marcador ── */}
@@ -309,7 +449,7 @@ export default function SpectatorScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* ── Log de eventos ── */}
+        {/* ── Log de actividad ── */}
         {log.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>ACTIVIDAD</Text>
@@ -341,8 +481,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     ...shadows.purple,
   },
-  exitBtn: { width: 60 },
-  exitBtnText: { color: MUTED, fontSize: 14, fontWeight: '600' },
+  exitBtn:      { width: 60 },
+  exitBtnText:  { color: MUTED, fontSize: 14, fontWeight: '600' },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerCode: { fontSize: 20, fontWeight: '900', color: GOLD, letterSpacing: 4 },
   headerPhase: { fontSize: 11, color: PURPLE, fontWeight: '700', marginTop: 2 },
@@ -356,29 +496,31 @@ const styles = StyleSheet.create({
   // Barra de ronda
   roundBar: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: PURPLE + '18',
-    paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: PURPLE + '15',
+    paddingHorizontal: 16, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: PURPLE + '30',
     gap: 12,
   },
-  roundBarText: { fontSize: 11, fontWeight: '700', color: PURPLE, letterSpacing: 1 },
-  roundProgress: { flexDirection: 'row', gap: 6 },
-  roundDot: {
+  progressLeft: { alignItems: 'flex-start', minWidth: 64 },
+  progressLaunch: { fontSize: 9, fontWeight: '800', color: PURPLE, letterSpacing: 2 },
+  progressRound:  { fontSize: 12, color: MUTED, marginTop: 1 },
+  progressRoundBold: { fontWeight: '800', color: TEXT },
+  dotsRow:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  dot: {
     width: 8, height: 8, borderRadius: 4, backgroundColor: BORDER,
   },
-  roundDotActive: { backgroundColor: PURPLE },
+  dotPlayed:  { backgroundColor: PURPLE + '70' },
+  dotCurrent: { backgroundColor: PURPLE, width: 10, height: 10, borderRadius: 5 },
+  dotSpacer:  { marginRight: 6 },
+  progressTotal: { fontSize: 11, color: MUTED, fontWeight: '600', minWidth: 40, textAlign: 'right' },
 
   root:   { flex: 1, backgroundColor: 'transparent' },
   scroll: { paddingHorizontal: 14, paddingTop: 14 },
 
-  // Sección
-  section: { marginBottom: 20 },
-  sectionLabel: {
-    fontSize: 9, fontWeight: '700', color: MUTED,
-    letterSpacing: 2, marginBottom: 10,
-  },
+  section:      { marginBottom: 20 },
+  sectionLabel: { fontSize: 9, fontWeight: '700', color: MUTED, letterSpacing: 2, marginBottom: 10 },
 
-  // Lista jugadores
+  // Tarjeta jugador
   playersList: { gap: 10 },
   playerCard: {
     backgroundColor: CARD, borderRadius: 16,
@@ -387,22 +529,33 @@ const styles = StyleSheet.create({
   },
   playerCardOff:  { opacity: 0.45 },
   playerCardDone: { borderColor: GREEN + '40' },
+  playerCardTurn: { borderColor: GOLD + '80', backgroundColor: GOLD + '08' },
 
   playerHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: {
     width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontSize: 18, fontWeight: '800', color: '#fff' },
-  playerMeta: { flex: 1 },
-  playerName: { fontSize: 15, fontWeight: '700', color: TEXT },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusLabel: { fontSize: 11, color: MUTED, fontWeight: '600' },
-  scoreBox: { alignItems: 'flex-end' },
-  scoreValue: { fontSize: 20, fontWeight: '900', color: GOLD },
-  scoreUnit: { fontSize: 10, color: MUTED },
+  avatarText:   { fontSize: 18, fontWeight: '800', color: '#fff' },
+  playerMeta:   { flex: 1 },
+  playerName:   { fontSize: 15, fontWeight: '700', color: TEXT },
+  statusRow:    { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  statusEmoji:  { fontSize: 12 },
+  statusDot:    { width: 7, height: 7, borderRadius: 4 },
+  statusLabel:  { fontSize: 11, color: MUTED, fontWeight: '600' },
+  scoreBox:     { alignItems: 'flex-end' },
+  scoreValue:   { fontSize: 20, fontWeight: '900', color: GOLD },
+  scoreUnit:    { fontSize: 10, color: MUTED },
 
+  // Countdown
+  countdownRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  countdownTrack: {
+    flex: 1, height: 4, backgroundColor: BORDER, borderRadius: 2, overflow: 'hidden',
+  },
+  countdownFill: { height: 4, borderRadius: 2 },
+  countdownNum:  { fontSize: 11, fontWeight: '800', minWidth: 26, textAlign: 'right' },
+
+  // Dados
   diceRow: {
     flexDirection: 'row', alignItems: 'center',
     gap: 8, marginTop: 12, flexWrap: 'wrap',
@@ -425,12 +578,48 @@ const styles = StyleSheet.create({
   },
   handTagText: { fontSize: 11, fontWeight: '700' },
 
+  // Dados disponibles
+  availableRow: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: 5, marginTop: 10,
+  },
+  diceChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: BG, borderRadius: 8, borderWidth: 1, borderColor: BORDER,
+    paddingHorizontal: 7, paddingVertical: 3,
+  },
+  diceChipEmoji: { fontSize: 13 },
+  diceChipCount: { fontSize: 9, fontWeight: '800' },
+  noDice: { fontSize: 10, color: MUTED, fontStyle: 'italic', marginTop: 6 },
+
   roundPtsRow: {
     flexDirection: 'row', justifyContent: 'flex-end',
-    alignItems: 'center', gap: 6, marginTop: 8,
+    alignItems: 'center', gap: 6, marginTop: 10,
   },
   roundPtsLabel: { fontSize: 11, color: MUTED },
   roundPtsValue: { fontSize: 14, fontWeight: '800' },
+
+  // Resumen lanzamiento
+  launchSummary: {
+    backgroundColor: CARD, borderRadius: 16,
+    borderWidth: 1.5, borderColor: PURPLE + '40',
+    padding: 14, marginBottom: 20,
+  },
+  launchSummaryTitle: {
+    fontSize: 11, fontWeight: '800', color: PURPLE,
+    letterSpacing: 1, marginBottom: 10,
+  },
+  summaryRow: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 10, paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: BORDER,
+  },
+  summaryRowHit:  { backgroundColor: GREEN  + '08' },
+  summaryRowMiss: { backgroundColor: RED    + '08' },
+  summaryName:    { fontSize: 13, fontWeight: '700', color: TEXT, width: 80 },
+  summaryPred:    { fontSize: 10, color: MUTED },
+  summaryResult:  { fontSize: 11, fontWeight: '700', marginTop: 2 },
+  summaryPts:     { fontSize: 16, fontWeight: '900', marginLeft: 'auto' },
 
   // Estado vacío
   emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },

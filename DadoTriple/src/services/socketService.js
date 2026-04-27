@@ -6,8 +6,7 @@
  * Protocolo del cliente:  { type: string, payload: object }
  */
 
-const WS_URL = 'ws://10.0.2.2:3001'; // Android emulator -> host machine
-const WS_URL_PROD = 'wss://dado-triple-backend.onrender.com'; // URL de producción (con SSL)
+const WS_URL = 'wss://dado-triple-backend.onrender.com'; // 'ws://localhost:3000';
 
 class SocketService {
   constructor() {

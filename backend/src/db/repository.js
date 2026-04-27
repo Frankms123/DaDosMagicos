@@ -6,12 +6,7 @@ let db;
 async function connect() {
   if (db) return db;
 
-  const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
-  if (!uri) {
-    throw new Error('La variable de entorno MONGO_URI no está definida');
-  }
-  console.log('🔗 Intentando conectar a:', uri.split('@')[1] ? '***@' + uri.split('@')[1] : uri);
-  client = new MongoClient(uri);
+  client = new MongoClient(process.env.MONGODB_URI);
   await client.connect();
   db = client.db(process.env.MONGODB_DB || 'dado_triple');
   console.log('📦 Conectado a MongoDB');
@@ -19,8 +14,9 @@ async function connect() {
 }
 
 /**
- * Persiste el resultado final de una partida.
- * MongoDB es ideal aquí porque el esquema es flexible y podemos guardar los snapshots de cada ronda sin transformarlos.
+ * Persiste la partida completa en un solo documento al finalizar.
+ * MongoDB es ideal aquí: el snapshot JSONB de Postgres es simplemente
+ * un objeto nativo en Mongo, sin conversión.
  *
  * Estructura del documento guardado:
  * {
@@ -33,20 +29,107 @@ async function connect() {
  */
 async function persistGameResult(room) {
   const database = await connect();
+  const now      = new Date();
 
-  const players = [...room.players.values()].map(p => ({
-    id: p.id,
-    name: p.name,
-    totalPoints: p.totalPoints,
-  }));
+  // ── Resumen de jugadores ──────────────────────────────────────────────────
+  const playersSummary = [...room.players.values()]
+    .sort((a, b) => b.totalPoints - a.totalPoints)
+    .map((p, i) => ({
+      id:          p.id,
+      name:        p.name,
+      position:    i + 1,
+      totalPoints: p.totalPoints,
+    }));
+
+  // ── Bitácora por lanzamiento ──────────────────────────────────────────────
+  // Agrupar los 9 roundLogs en 3 lanzamientos de 3 rondas cada uno
+  const launches = [1, 2, 3].map(launchNum => {
+    const launchRounds = room.roundLogs.filter(r => r.launch === launchNum);
+    const lastRound    = launchRounds.find(r => r.isLastRoundOfLaunch);
+
+    // Datos por jugador en este lanzamiento
+    const playerLaunchData = [...room.players.keys()].map(pid => {
+      // Sacar el estado del jugador del snapshot de la última ronda del lanzamiento
+      const snap = lastRound?.players.find(p => p.id === pid);
+      if (!snap) return null;
+
+      return {
+        id:             pid,
+        name:           snap.name,
+        allDice:        snap.allDice,
+        visibleDice:    snap.visibleDice,
+        hiddenDice:     snap.hiddenDice,
+        prediction:     snap.prediction,
+        predictionHit:  snap.predictionHit,
+        launchPoints:   snap.launchPoints,
+        predictionBonus:snap.predictionBonus,
+      };
+    }).filter(Boolean);
+
+    // Rondas del lanzamiento con detalle
+    const roundsDetail = launchRounds.map(r => ({
+      round:          r.round,
+      roundInLaunch:  r.roundInLaunch,
+      turnOrder:      r.turnOrder,
+      players: r.players.map(p => ({
+        id:            p.id,
+        name:          p.name,
+        position:      p.position,
+        availableBeforeSelection: p.availableBeforeSelection,
+        presentedDice: p.presentedDice,
+        presentedIndices: p.presentedIndices,
+        hand:          p.hand,
+        basePoints:    p.basePoints,
+        predictionBonus: p.predictionBonus,
+        launchPoints:  p.launchPoints,
+        totalPoints:   p.totalPoints,
+      })),
+      timestamp: r.timestamp,
+    }));
+
+    return {
+      launch:        launchNum,
+      playerData:    playerLaunchData,   // dados lanzados + predicción + resultado del lance
+      rounds:        roundsDetail,        // detalle de cada una de las 3 rondas
+      launchSummary: lastRound?.launchSummary ?? null,  // resumen al final del lanzamiento
+    };
+  });
+
+  // ── Resultados finales ────────────────────────────────────────────────────
+  const finalResults = playersSummary.map(p => {
+    // Calcular puntos base totales (sin bonus) para contraste
+    const baseTotal = room.roundLogs.reduce((sum, r) => {
+      const rp = r.players.find(rpl => rpl.id === p.id);
+      return sum + (rp?.basePoints ?? 0);
+    }, 0);
+    const bonusTotal = room.roundLogs.reduce((sum, r) => {
+      const rp = r.players.find(rpl => rpl.id === p.id);
+      return sum + (rp?.predictionBonus ?? 0);
+    }, 0);
+    return {
+      ...p,
+      basePointsTotal:       Math.round(baseTotal  * 10) / 10,
+      predictionBonusTotal:  Math.round(bonusTotal * 10) / 10,
+    };
+  });
 
   await database.collection('games').insertOne({
-    gameId: room.id,
-    roomCode: room.code,
-    startedAt: room.createdAt,
-    finishedAt: new Date(),
-    players,
-    rounds: room.roundLogs,   // los 3 snapshots tal cual, sin serializar
+    gameId:     room.id,
+    roomCode:   room.code,
+    startedAt:  room.createdAt,
+    finishedAt: now,
+    durationMs: now - room.createdAt,
+    playerCount: room.players.size,
+
+    // Resumen rápido (para queries sin necesidad de unwind)
+    players:      playersSummary,
+    winner:       playersSummary[0] ?? null,
+
+    // Bitácora completa estructurada por lanzamiento
+    launches,
+
+    // Resultados finales con desglose base vs bonus
+    finalResults,
   });
 }
 

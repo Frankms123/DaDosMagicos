@@ -1,15 +1,14 @@
-/**
- * LobbyScreen.js
- * Pantalla de entrada: crear sala o unirse con código.
- * Conectada al servidor WebSocket real.
- */
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform,
-  Animated, Easing, ActivityIndicator, Alert,
+  Animated, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { 
+  Dices, PlusCircle, Key, Eye, AlertCircle, 
+  Gamepad2, User, ShieldCheck, Share2
+} from 'lucide-react-native';
 import socketService from '../services/socketService';
 import { playSound } from '../services/soundService';
 import useGameStore from '../store/useGameStore';
@@ -38,7 +37,7 @@ function ConnectionDot({ connected }) {
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1.5, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1,   duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
       ])
     );
     loop.start();
@@ -60,7 +59,7 @@ function ConnectionDot({ connected }) {
 }
 
 // ─── Componente: Campo de entrada ────────────────────────────────────────────
-function Field({ label, value, onChangeText, placeholder, keyboardType, autoCapitalize, maxLength, style, inputStyle }) {
+function Field({ label, value, onChangeText, placeholder, keyboardType, autoCapitalize, maxLength, style, inputStyle, icon: IconComponent }) {
   const [focused, setFocused] = useState(false);
   const borderAnim = useRef(new Animated.Value(0)).current;
 
@@ -82,6 +81,11 @@ function Field({ label, value, onChangeText, placeholder, keyboardType, autoCapi
     <View style={[styles.fieldWrapper, style]}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <Animated.View style={[styles.fieldBorder, { borderColor }]}>
+        {IconComponent && (
+          <View style={styles.fieldIcon}>
+            <IconComponent size={18} color={focused ? PURPLE : MUTED} />
+          </View>
+        )}
         <TextInput
           style={[styles.fieldInput, inputStyle]}
           value={value}
@@ -100,76 +104,29 @@ function Field({ label, value, onChangeText, placeholder, keyboardType, autoCapi
   );
 }
 
-// ─── Pantalla principal ───────────────────────────────────────────────────────
 export default function LobbyScreen() {
-  const storedName = useGameStore.getState().playerName ?? '';
-  const [tab, setTab]             = useState('create'); // 'create' | 'join' | 'spectator'
-  const [playerName, setPlayerName] = useState(storedName);
-  const [roomCode, setRoomCode]   = useState('');
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState(null);
-
+  const playerName = useGameStore(s => s.playerName);
   const isConnected = useGameStore(s => s.isConnected);
-  const setPlayerNameStore = (name) => useGameStore.setState({ playerName: name });
 
-  // Animaciones
-  const logoAnim   = useRef(new Animated.Value(0)).current;
-  const cardAnim   = useRef(new Animated.Value(40)).current;
-  const cardOpacity = useRef(new Animated.Value(0)).current;
-  const tabIndicator = useRef(new Animated.Value(0)).current;
-  const errorShake = useRef(new Animated.Value(0)).current;
+  const [tab, setTab] = useState('create');
+  const [localName, setLocalName] = useState(playerName || '');
+  const [roomCode, setRoomCode] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Resetear estado local al montar (viene de GameOver o de otra pantalla)
-    setLoading(false);
-    setError(null);
-
-    // Conectar al servidor
-    socketService.connect();
-
-    socketService.on('__connected', () => {
-      useGameStore.setState({ isConnected: true });
-    });
-    socketService.on('__disconnected', () => {
-      useGameStore.setState({ isConnected: false });
-    });
-
-    // Escuchar error del servidor
-    socketService.on('error', (payload) => {
-      setError(payload.message);
-      setLoading(false);
-      shakeError();
-    });
-
-    // Cancelar loading si room_created llega (navegación ya ocurrió via useWebSocket)
-    socketService.on('room_created', () => setLoading(false));
-    socketService.on('room_joined',  () => setLoading(false));
-
-    // Animación de entrada
-    Animated.parallel([
-      Animated.spring(logoAnim, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
-      Animated.sequence([
-        Animated.delay(200),
-        Animated.parallel([
-          Animated.spring(cardAnim, { toValue: 0, useNativeDriver: true, tension: 70, friction: 10 }),
-          Animated.timing(cardOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        ]),
-      ]),
-    ]).start();
-
-    return () => {
-      socketService.offAll('error');
-      socketService.offAll('__connected');
-      socketService.offAll('__disconnected');
-    };
+    Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+    if (!isConnected) socketService.connect();
   }, []);
 
   const shakeError = () => {
     Animated.sequence([
-      Animated.timing(errorShake, { toValue: 10,  duration: 60, useNativeDriver: true }),
-      Animated.timing(errorShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-      Animated.timing(errorShake, { toValue: 6,   duration: 60, useNativeDriver: true }),
-      Animated.timing(errorShake, { toValue: 0,   duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
     ]).start();
   };
 
@@ -209,18 +166,8 @@ export default function LobbyScreen() {
     if (!validate()) return;
     setError(null);
     setLoading(true);
-    useGameStore.setState({ playerName: playerName.trim() });
-
-    // El servidor responderá con room_created → useWebSocket lo manejará
-    socketService.createRoom(playerName.trim(), 4);
-
-    // Timeout de seguridad
-    setTimeout(() => {
-      if (loading) {
-        setLoading(false);
-        setError('Sin respuesta del servidor. ¿Está corriendo?');
-      }
-    }, 8000);
+    socketService.createRoom(finalName.trim(), 4);
+    setTimeout(() => setLoading(false), 5000);
   };
 
   const handleJoin = () => {
@@ -228,15 +175,8 @@ export default function LobbyScreen() {
     if (!validate()) return;
     setError(null);
     setLoading(true);
-    useGameStore.setState({ playerName: playerName.trim() });
-    socketService.joinRoom(roomCode.trim().toUpperCase(), playerName.trim());
-
-    setTimeout(() => {
-      if (loading) {
-        setLoading(false);
-        setError('Sala no encontrada o el servidor no responde');
-      }
-    }, 8000);
+    socketService.joinRoom(roomCode.trim().toUpperCase(), finalName.trim());
+    setTimeout(() => setLoading(false), 5000);
   };
 
   const handleSpectator = () => {
@@ -244,22 +184,10 @@ export default function LobbyScreen() {
     if (!validate()) return;
     setError(null);
     setLoading(true);
-    useGameStore.setState({ playerName: playerName.trim() });
-    socketService.joinAsSpectator(roomCode.trim().toUpperCase(), playerName.trim());
-
-    setTimeout(() => {
-      if (loading) {
-        setLoading(false);
-        setError('Sala no encontrada');
-      }
-    }, 8000);
+    const finalName = playerName || localName || 'Espectador';
+    socketService.joinAsSpectator(roomCode.trim().toUpperCase(), finalName);
+    setTimeout(() => setLoading(false), 5000);
   };
-
-  const tabWidth = 100 / 3;
-  const indicatorLeft = tabIndicator.interpolate({
-    inputRange: [0, 1, 2],
-    outputRange: ['0%', `${tabWidth}%`, `${tabWidth * 2}%`],
-  });
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -274,16 +202,15 @@ export default function LobbyScreen() {
             <DiceFace value={3} size={62} pipColor={GOLD} faceColor={CARD} borderColor={GOLD + '88'} />
           </View>
           <Text style={styles.title}>Dado Triple</Text>
-          <Text style={styles.subtitle}>El Plan del Diablo — T2</Text>
+          <Text style={styles.subtitle}>El Plan del Diablo</Text>
 
           {/* Indicador de conexión */}
           <View style={styles.connectionRow}>
             <ConnectionDot connected={isConnected} />
             <Text style={[styles.connectionText, { color: isConnected ? SUCCESS : MUTED }]}>
-              {isConnected ? 'Servidor conectado' : 'Conectando...'}
+              {isConnected ? 'En Línea' : 'Desconectado'}
             </Text>
           </View>
-        </Animated.View>
 
         {/* ── Card principal ── */}
         <Animated.View
@@ -304,42 +231,58 @@ export default function LobbyScreen() {
             ))}
           </View>
 
-          {/* Campo nombre */}
-          <Field
-            label="TU NOMBRE"
-            value={playerName}
-            onChangeText={setPlayerName}
-            placeholder="Ej: Alice"
-            autoCapitalize="words"
-            maxLength={16}
-          />
+          <View style={styles.card}>
+            {!playerName ? (
+              <Field 
+                label="TU NOMBRE"
+                value={localName}
+                onChangeText={setLocalName}
+                placeholder="Ej. Frank Mora"
+                icon={User}
+                style={{ marginBottom: 20 }}
+              />
+            ) : (
+              <View style={styles.greetingBox}>
+                <View style={styles.userAvatar}><ShieldCheck size={20} color={PURPLE} /></View>
+                <View>
+                  <Text style={styles.greetingLabel}>JUGANDO COMO</Text>
+                  <Text style={styles.greetingName}>{playerName}</Text>
+                </View>
+              </View>
+            )}
 
-          {/* Campo código (join y spectator) */}
-          {(tab === 'join' || tab === 'spectator') && (
-            <Field
-              label="CÓDIGO DE SALA"
-              value={roomCode}
-              onChangeText={(t) => setRoomCode(t.toUpperCase())}
-              placeholder="AB3K"
-              autoCapitalize="characters"
-              maxLength={4}
-              inputStyle={styles.codeInputStyle}
-            />
-          )}
+            {(tab === 'join' || tab === 'spectator') && (
+              <Field 
+                label="CÓDIGO DE SALA"
+                value={roomCode}
+                onChangeText={(t) => setRoomCode(t.toUpperCase())}
+                placeholder="ABCD"
+                maxLength={4}
+                autoCapitalize="characters"
+                icon={Gamepad2}
+                inputStyle={styles.codeInputStyle}
+              />
+            )}
 
-          {/* Info según tab */}
-          {tab === 'create' && (
-            <View style={styles.infoBox}>
-              <Text style={styles.infoText}>
-                Se creará una sala y recibirás un código de 4 letras para compartir con hasta 3 amigos.
-              </Text>
-            </View>
-          )}
-          {tab === 'spectator' && (
-            <View style={[styles.infoBox, styles.infoBoxGold]}>
-              <Text style={[styles.infoText, { color: GOLD }]}>
-                Como espectador verás la partida en tiempo real sin participar en el juego.
-              </Text>
+            <View style={styles.actions}>
+              {loading ? (
+                <ActivityIndicator color={PURPLE} size="large" />
+              ) : (
+                <TouchableOpacity 
+                  style={[
+                    styles.actionBtn,
+                    tab === 'create' ? styles.actionBtnCreate : 
+                    tab === 'join' ? styles.actionBtnJoin : styles.actionBtnSpectator,
+                    (!isConnected) && styles.actionBtnDisabled
+                  ]}
+                  onPress={tab === 'create' ? handleCreate : tab === 'join' ? handleJoin : handleSpectator}
+                  disabled={!isConnected}
+                >
+                  <Text style={styles.actionBtnText}>
+                    {tab === 'create' ? 'CREAR PARTIDA' : tab === 'join' ? 'ENTRAR A LA SALA' : 'VER PARTIDA'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 
@@ -373,8 +316,6 @@ export default function LobbyScreen() {
             )}
           </GameButton>
         </Animated.View>
-
-        <Text style={styles.footer}>Dado Triple v1.0 · El Plan del Diablo T2</Text>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -412,57 +353,23 @@ const styles = StyleSheet.create({
     padding: 22,
     ...shadows.purple,
   },
-
-  // Tabs
-  tabs: {
-    flexDirection: 'row', backgroundColor: BG,
-    borderRadius: 14, padding: 4,
-    marginBottom: 22, position: 'relative', overflow: 'hidden',
+  dotWrapper: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  dotOuter: { position: 'absolute', width: 14, height: 14, borderRadius: 7 },
+  dotInner: { width: 6, height: 6, borderRadius: 3 },
+  connectionText: { fontSize: 10, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
+  tabContainer: { 
+    flexDirection: 'row', backgroundColor: CARD, borderRadius: 16, 
+    padding: 6, marginBottom: 20, borderWidth: 1, borderColor: BORDER 
   },
-  tabIndicator: {
-    position: 'absolute', top: 4, bottom: 4,
-    backgroundColor: PURPLE, borderRadius: 11,
-  },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', zIndex: 1 },
-  tabText: { fontSize: 12, fontWeight: '700', color: MUTED },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12, gap: 8 },
+  tabActive: { backgroundColor: BORDER },
+  tabIcon: { opacity: 0.8 },
+  tabText: { fontSize: 13, fontWeight: '700', color: MUTED },
   tabTextActive: { color: TEXT },
-
-  // Campos
-  fieldWrapper: { marginBottom: 16 },
-  fieldLabel: {
-    fontSize: 10, fontWeight: '700', color: MUTED,
-    letterSpacing: 1.5, marginBottom: 8,
-  },
-  fieldBorder: {
-    borderWidth: 1.5, borderRadius: 12,
-    backgroundColor: BG, overflow: 'hidden',
-  },
-  fieldInput: {
-    paddingHorizontal: 16, paddingVertical: 14,
-    color: TEXT, fontSize: 16,
-  },
-  codeInputStyle: {
-    fontSize: 28, fontWeight: '800',
-    letterSpacing: 10, textAlign: 'center', color: GOLD,
-  },
-
-  // Info
-  infoBox: {
-    backgroundColor: PURPLE + '15', borderRadius: 12,
-    borderWidth: 1, borderColor: PURPLE + '35',
-    padding: 12, marginBottom: 16,
-  },
-  infoBoxGold: {
-    backgroundColor: GOLD + '10',
-    borderColor: GOLD + '30',
-  },
-  infoText: { fontSize: 12, color: '#A78BFA', lineHeight: 18 },
-
-  // Error
-  errorBox: {
-    backgroundColor: DANGER + '15', borderRadius: 10,
-    borderWidth: 1, borderColor: DANGER + '40',
-    padding: 10, marginBottom: 14,
+  card: { backgroundColor: CARD, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: BORDER },
+  greetingBox: { 
+    flexDirection: 'row', alignItems: 'center', backgroundColor: BG, 
+    padding: 16, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: BORDER 
   },
   errorText: { fontSize: 13, color: DANGER, fontWeight: '600' },
 
@@ -479,4 +386,23 @@ const styles = StyleSheet.create({
   actionBtnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
 
   footer: { marginTop: 28, fontSize: 11, color: BORDER },
+});
+  userAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: BORDER, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  greetingLabel: { fontSize: 10, fontWeight: '800', color: MUTED, letterSpacing: 1 },
+  greetingName: { fontSize: 18, fontWeight: '700', color: TEXT },
+  fieldWrapper: { width: '100%' },
+  fieldLabel: { fontSize: 11, fontWeight: '800', color: MUTED, marginBottom: 8, marginLeft: 4, letterSpacing: 1 },
+  fieldBorder: { flexDirection: 'row', alignItems: 'center', backgroundColor: BG, borderRadius: 16, borderWidth: 1.5, paddingHorizontal: 16 },
+  fieldIcon: { marginRight: 12 },
+  fieldInput: { flex: 1, height: 56, fontSize: 16, color: TEXT, fontWeight: '600' },
+  codeInputStyle: { fontSize: 24, letterSpacing: 8, textAlign: 'center', fontWeight: '900', color: GOLD },
+  actions: { marginTop: 24 },
+  actionBtn: { borderRadius: 18, paddingVertical: 18, alignItems: 'center' },
+  actionBtnCreate: { backgroundColor: PURPLE },
+  actionBtnJoin: { backgroundColor: SUCCESS },
+  actionBtnSpectator: { backgroundColor: GOLD },
+  actionBtnDisabled: { opacity: 0.5 },
+  actionBtnText: { fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+  footerInfo: { alignItems: 'center', marginTop: 32 },
+  footer: { fontSize: 12, color: MUTED, textAlign: 'center' },
 });

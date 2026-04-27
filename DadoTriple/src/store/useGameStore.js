@@ -6,8 +6,9 @@ import { create } from 'zustand';
 
 const useGameStore = create((set, get) => ({
   // ─── Identidad ───────────────────────────────────────────────────────────────
-  playerId:   null,
-  playerName: null,
+  playerId:    null,
+  playerName:  null,
+  playerEmail: null,
   roomId:     null,
   roomCode:   null,
   isHost:     false,
@@ -239,7 +240,7 @@ const useGameStore = create((set, get) => ({
   // ─── Reset ───────────────────────────────────────────────────────────────────
 
   resetGame: () => {
-    const { playerName } = useGameStore.getState();
+    const { playerName, playerEmail } = useGameStore.getState();
     set({
       roomId: null, roomCode: null, playerId: null,
       isHost: false, isSpectator: false,
@@ -250,6 +251,7 @@ const useGameStore = create((set, get) => ({
       allDice: [], usedDiceIndices: [], selectedDiceIndices: [],
       presentedHistory: [], roundSnapshot: null, gameOver: null,
       playerName,
+      playerEmail,
     });
   },
 }));

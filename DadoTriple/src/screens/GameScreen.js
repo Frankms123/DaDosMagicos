@@ -5,11 +5,14 @@
  * - Dados en 6 columnas por valor
  * - Dados ocultos azul y rojo seleccionables
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, Animated, Alert, Modal, Easing,
+  Dimensions, PanResponder,
 } from 'react-native';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
 import { playSound } from '../services/soundService';
@@ -49,27 +52,65 @@ function getPhaseLabel(gamePhase, yaPresente) {
   return 'Puntuando';
 }
 
-// ─── Modal de Predicción ──────────────────────────────────────────────────────
-function PredictionModal({ visible, launchNumber, onPredict }) {
-  const scale   = useRef(new Animated.Value(0.8)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+// ─── Bottom Sheet de Predicción ──────────────────────────────────────────────
+const PredictionModal = forwardRef(function PredictionModal({ visible, launchNumber, onPredict, onCollapseChange }, ref) {
+  const translateY    = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
   const [selected, setSelected] = useState(null);
+  const [mounted,  setMounted]  = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Altura colapsada: deja visible la barra superior del sheet (~80px desde abajo)
+  const COLLAPSED_Y = SCREEN_HEIGHT * 0.82;
+
+  const animateTo = (toValue, cb) => {
+    Animated.spring(translateY, {
+      toValue, useNativeDriver: true, tension: 65, friction: 11,
+    }).start(cb);
+  };
 
   useEffect(() => {
     if (visible) {
       setSelected(null);
+      setCollapsed(false);
+      onCollapseChange?.(false);
+      setMounted(true);
       Animated.parallel([
-        Animated.spring(scale,   { toValue: 1, useNativeDriver: true, tension: 70, friction: 8 }),
-        Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 65, friction: 11 }),
+        Animated.timing(overlayOpacity, { toValue: 0.35, duration: 300, useNativeDriver: true }),
       ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(translateY,     { toValue: SCREEN_HEIGHT, duration: 280, useNativeDriver: true }),
+        Animated.timing(overlayOpacity, { toValue: 0, duration: 280, useNativeDriver: true }),
+      ]).start(() => setMounted(false));
     }
   }, [visible]);
+
+  const handleCollapse = () => {
+    setCollapsed(true);
+    onCollapseChange?.(true);
+    animateTo(COLLAPSED_Y);
+    Animated.timing(overlayOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+  };
+
+  const handleExpand = () => {
+    setCollapsed(false);
+    onCollapseChange?.(false);
+    animateTo(0);
+    Animated.timing(overlayOpacity, { toValue: 0.35, duration: 200, useNativeDriver: true }).start();
+  };
+
+  // Exponer handleExpand al padre via ref
+  useImperativeHandle(ref, () => ({ expand: handleExpand }));
 
   const handleConfirm = () => {
     if (!selected) return;
     playSound('click', 0.65);
     onPredict(selected);
   };
+
+  if (!mounted) return null;
 
   return (
     <Modal visible={visible} transparent animationType="none">
@@ -112,21 +153,103 @@ function PredictionModal({ visible, launchNumber, onPredict }) {
             ))}
           </View>
 
+      <Animated.View style={[styles.bsContainer, { transform: [{ translateY }] }]}>
+        {/* Handle + botón colapsar/expandir */}
+        <View style={styles.bsHandleRow}>
+          <View style={styles.bsHandle} />
           <TouchableOpacity
-            style={[styles.confirmBtn, !selected && styles.confirmBtnDisabled]}
-            onPress={handleConfirm}
-            disabled={!selected}
-            activeOpacity={0.85}
+            style={styles.bsCollapseBtn}
+            onPress={collapsed ? handleExpand : handleCollapse}
+            activeOpacity={0.7}
           >
             <Text style={styles.confirmBtnText}>
               {selected ? 'Confirmar predicción' : 'Elige una opción'}
             </Text>
           </TouchableOpacity>
-        </Animated.View>
-      </View>
-    </Modal>
+        </View>
+
+        {/* Contenido — se oculta al colapsar */}
+        {!collapsed && (
+          <>
+            <Text style={styles.bsLaunch}>LANZAMIENTO {launchNumber}</Text>
+            <Text style={styles.bsTitle}>¿Cuántos puntos obtendrás?</Text>
+            <Text style={styles.bsSub}>Mira tus dados arriba y predice</Text>
+
+            <View style={styles.bsOptions}>
+              {PREDICTION_OPTIONS.map(opt => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[
+                    styles.bsOption,
+                    { borderColor: opt.color + '40' },
+                    selected === opt.key && {
+                      backgroundColor: opt.color + '20',
+                      borderColor: opt.color,
+                    },
+                  ]}
+                  onPress={() => setSelected(opt.key)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.bsOptionEmoji}>{opt.emoji}</Text>
+                  <View style={styles.bsOptionText}>
+                    <Text style={[styles.bsOptionLabel, {
+                      color: selected === opt.key ? opt.color : TEXT,
+                    }]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={styles.bsOptionDesc}>{opt.desc}</Text>
+                  </View>
+                  {selected === opt.key && (
+                    <View style={[styles.bsOptionCheck, { backgroundColor: opt.color }]}>
+                      <Text style={styles.bsOptionCheckText}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.bsConfirmBtn, !selected && styles.bsConfirmBtnDisabled]}
+              onPress={handleConfirm}
+              disabled={!selected}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.bsConfirmBtnText}>
+                {selected ? '✅ Confirmar predicción' : 'Elige una opción'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Vista colapsada — solo muestra opción seleccionada si hay una */}
+        {collapsed && (
+          <View style={styles.bsCollapsedContent}>
+            {selected ? (
+              <>
+                <Text style={styles.bsCollapsedLabel}>Tu predicción:</Text>
+                <Text style={[styles.bsCollapsedValue, {
+                  color: PREDICTION_OPTIONS.find(o => o.key === selected)?.color ?? TEXT
+                }]}>
+                  {PREDICTION_OPTIONS.find(o => o.key === selected)?.emoji}{' '}
+                  {PREDICTION_OPTIONS.find(o => o.key === selected)?.label}
+                </Text>
+                <TouchableOpacity
+                  style={styles.bsConfirmBtnSmall}
+                  onPress={handleConfirm}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.bsConfirmBtnText}>✅ Confirmar</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text style={styles.bsCollapsedHint}>Toca "Ver predicción" para elegir</Text>
+            )}
+          </View>
+        )}
+      </Animated.View>
+    </>
   );
-}
+});
 
 // ─── Badge de predicción activa ───────────────────────────────────────────────
 function PredictionBadge({ prediction }) {
@@ -580,6 +703,77 @@ function HiddenDie({ value, color, label, index, selected, used, onPress, canSel
   );
 }
 
+// ─── Dados de otro jugador (agrupados por valor) ──────────────────────────────
+function OtherPlayerDice({ allDice, usedDiceIndices, isMe }) {
+  const visibleDice = allDice.slice(0, 9);
+  const diceByValue = {};
+  visibleDice.forEach((val, i) => {
+    if (usedDiceIndices.includes(i)) return;
+    if (val === null) return;
+    if (!diceByValue[val]) diceByValue[val] = [];
+    diceByValue[val].push(val);
+  });
+
+  const BLUE = '#3B82F6';
+  const RED  = '#EF4444';
+
+  // Dados ocultos
+  const hidden0 = allDice[9];
+  const hidden1 = allDice[10];
+  const hidden0Used = usedDiceIndices.includes(9);
+  const hidden1Used = usedDiceIndices.includes(10);
+
+  const groups = Object.entries(diceByValue).sort((a, b) => Number(a[0]) - Number(b[0]));
+  const hasAnything = groups.length > 0 || (!hidden0Used && hidden0 !== undefined) || (!hidden1Used && hidden1 !== undefined);
+
+  if (!hasAnything) {
+    return <Text style={styles.otherWaiting}>sin dados disponibles</Text>;
+  }
+
+  return (
+    <View style={styles.otherAvailableDice}>
+      {groups.map(([val, arr]) => (
+        <View key={val} style={styles.otherDiceGroup}>
+          <Text style={[styles.otherDiceGroupEmoji, { color: VALUE_COLOR[Number(val)] ?? MUTED }]}>
+            {DICE_FACE[Number(val)]}
+          </Text>
+          <Text style={[styles.otherDiceGroupCount, { color: VALUE_COLOR[Number(val)] ?? MUTED }]}>
+            ×{arr.length}
+          </Text>
+        </View>
+      ))}
+
+      {/* Dado oculto azul */}
+      {!hidden0Used && hidden0 !== undefined && (
+        <View style={[styles.otherDiceGroup, { borderColor: BLUE + '40', backgroundColor: BLUE + '10' }]}>
+          {isMe && hidden0 ? (
+            <>
+              <Text style={[styles.otherDiceGroupEmoji, { color: BLUE }]}>{DICE_FACE[hidden0] || '?'}</Text>
+              <Text style={[styles.otherDiceGroupCount, { color: BLUE }]}>{hidden0}</Text>
+            </>
+          ) : (
+            <Text style={[styles.otherDiceGroupEmoji, { color: BLUE }]}>🔵</Text>
+          )}
+        </View>
+      )}
+
+      {/* Dado oculto rojo */}
+      {!hidden1Used && hidden1 !== undefined && (
+        <View style={[styles.otherDiceGroup, { borderColor: RED + '40', backgroundColor: RED + '10' }]}>
+          {isMe && hidden1 ? (
+            <>
+              <Text style={[styles.otherDiceGroupEmoji, { color: RED }]}>{DICE_FACE[hidden1] || '?'}</Text>
+              <Text style={[styles.otherDiceGroupCount, { color: RED }]}>{hidden1}</Text>
+            </>
+          ) : (
+            <Text style={[styles.otherDiceGroupEmoji, { color: RED }]}>🔴</Text>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ─── Pantalla principal ───────────────────────────────────────────────────────
 export default function GameScreen({ route, navigation }) {
   const { roomCode, playerName } = route.params ?? {};
@@ -608,6 +802,9 @@ export default function GameScreen({ route, navigation }) {
   const [throwKey, setThrowKey]           = useState(0);
   const countdownRef = useRef(null);
   const throwTimerRef = useRef(null);
+  const [sheetCollapsed, setSheetCollapsed] = useState(false);
+  const countdownRef = useRef(null);
+  const predictionSheetRef = useRef(null);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   const diceBoardAnim = useRef(new Animated.Value(0)).current;
@@ -721,11 +918,24 @@ export default function GameScreen({ route, navigation }) {
 
       {/* Modal de predicción */}
       <PredictionModal
+        ref={predictionSheetRef}
         visible={gamePhase === 'predicting' && !hasPredicted}
         launchNumber={launchNumber}
         onPredict={handlePredict}
+        onCollapseChange={setSheetCollapsed}
       />
       <DiceThrowAnimation visible={throwVisible} runKey={throwKey} />
+
+      {/* Botón flotante cuando el sheet está colapsado */}
+      {gamePhase === 'predicting' && !hasPredicted && sheetCollapsed && (
+        <TouchableOpacity
+          style={styles.floatingPredBtn}
+          onPress={() => predictionSheetRef.current?.expand()}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.floatingPredBtnText}>🔮 Predecir</Text>
+        </TouchableOpacity>
+      )}
 
       <ScrollView style={styles.root} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
@@ -785,16 +995,89 @@ export default function GameScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* ── Otros jugadores ── */}
-        <View style={styles.othersRow}>
-          {otrosJugadores.map(p => (
-            <View key={p.id} style={[styles.otherPlayer, !p.isConnected && styles.otherPlayerOff]}>
-              <Text style={styles.otherPlayerName} numberOfLines={1}>{p.name}</Text>
-              <OpponentStatus player={p} phase={gamePhase} />
-              <OpponentVisibilityIndicator player={p} />
-              <OpponentVisibleDice player={p} />
-            </View>
-          ))}
+        {/* ── Todos los jugadores (incluido yo) ── */}
+        <View style={styles.othersGrid}>
+          {players.map((p, i) => {
+            const isMe = p.id === playerId;
+            const isTheirTurn = p.id === currentTurnPlayerId && gamePhase === 'selecting';
+            const dice = p.presentedDice ?? [];
+            const hasDice = dice.length > 0;
+            return (
+              <View key={p.id} style={[
+                styles.otherCard,
+                isMe && styles.otherCardMe,
+                !p.isConnected && styles.otherCardOff,
+                isTheirTurn && styles.otherCardActive,
+                hasDice && !isMe && styles.otherCardDone,
+                hasDice && isMe && yaPresente && styles.otherCardDone,
+              ]}>
+                {/* Header */}
+                <View style={styles.otherCardHeader}>
+                  <Text style={styles.otherPlayerName} numberOfLines={1}>{p.name}</Text>
+                  <Text style={styles.otherPlayerStatus}>
+                    {!p.isConnected              ? '⚠️'
+                     : gamePhase === 'predicting' && p.hasPredicted ? '🔮'
+                     : gamePhase === 'predicting' ? '⏳'
+                     : isTheirTurn               ? '🎯'
+                     : hasDice                   ? '✅'
+                     : p.hasRolled               ? '🎲'
+                     : '⏳'}
+                  </Text>
+                </View>
+
+                {/* Dados presentados en esta ronda */}
+                {hasDice && (
+                  <View style={styles.otherDiceRow}>
+                    {dice.map((val, di) => {
+                      const isHidden = val === null;
+                      const color = isHidden ? MUTED : (VALUE_COLOR[val] ?? MUTED);
+                      return (
+                        <View key={di} style={[styles.otherDie, { borderColor: color + '60' }]}>
+                          <Text style={[styles.otherDieEmoji, { color }]}>
+                            {isHidden ? '?' : (DICE_FACE[val] || val)}
+                          </Text>
+                          <Text style={[styles.otherDieNum, { color }]}>
+                            {isHidden ? '?' : val}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {/* Nombre de la mano */}
+                {hasDice && p.hand && !dice.includes(null) && (
+                  <Text style={[styles.otherHandName, {
+                    color: p.hand.name?.startsWith('Trío')     ? '#A78BFA'
+                         : p.hand.name?.startsWith('Escalera') ? '#34D399'
+                         : p.hand.name?.startsWith('Par')      ? '#60A5FA'
+                         : MUTED
+                  }]} numberOfLines={1}>
+                    {p.hand.name}
+                  </Text>
+                )}
+
+                {/* Dados disponibles */}
+                {!hasDice && (gamePhase === 'predicting' || gamePhase === 'selecting') && (isMe ? allDice : p.allDice)?.length > 0 && (
+                  <OtherPlayerDice
+                    allDice={isMe ? allDice : p.allDice}
+                    usedDiceIndices={isMe ? usedDiceIndices : (p.usedDiceIndices ?? [])}
+                    isMe={isMe}
+                  />
+                )}
+
+                {/* Esperando turno */}
+                {!hasDice && gamePhase === 'selecting' && !isTheirTurn && !isMe && (p.allDice?.length > 0) && (
+                  <Text style={styles.otherWaiting}>esperando turno...</Text>
+                )}
+
+                {/* Mi turno — recordatorio */}
+                {isMe && isTheirTurn && !hasDice && (
+                  <Text style={[styles.otherWaiting, { color: GOLD }]}>¡selecciona 3 dados arriba!</Text>
+                )}
+              </View>
+            );
+          })}
         </View>
 
         {/* ── Dados visibles ── */}
@@ -1011,10 +1294,20 @@ const styles = StyleSheet.create({
 
   // Otros jugadores
   othersRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  otherPlayer: {
-    flex: 1, backgroundColor: CARD, borderRadius: 10,
-    borderWidth: 1, borderColor: BORDER,
-    paddingVertical: 8, paddingHorizontal: 6, alignItems: 'center',
+  // Otros jugadores — grid expandido
+  othersGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  otherCard: {
+    width: '47%', backgroundColor: CARD,
+    borderRadius: 12, borderWidth: 1, borderColor: BORDER,
+    padding: 10,
+  },
+  otherCardOff:    { opacity: 0.4 },
+  otherCardActive: { borderColor: GOLD + '80', backgroundColor: GOLD + '08' },
+  otherCardDone:   { borderColor: GREEN + '40' },
+  otherCardMe:     { borderColor: PURPLE + '55', backgroundColor: PURPLE + '08' },
+  otherCardHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 6,
   },
   otherPlayerOff:    { opacity: 0.4 },
   otherPlayerName:   { fontSize: 11, fontWeight: '700', color: TEXT, marginBottom: 2 },
@@ -1048,6 +1341,30 @@ const styles = StyleSheet.create({
   otherPresentedRow: {
     flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 4,
   },
+  otherPlayerName:   { fontSize: 12, fontWeight: '700', color: TEXT, flex: 1 },
+  otherPlayerStatus: { fontSize: 14 },
+  otherDiceRow:  { flexDirection: 'row', gap: 4, marginBottom: 4 },
+  otherDie: {
+    width: 30, height: 36, backgroundColor: BG,
+    borderRadius: 7, borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  otherDieEmoji: { fontSize: 14 },
+  otherDieNum:   { fontSize: 8, fontWeight: '800', marginTop: 1 },
+  otherHandName: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+  otherWaiting:  { fontSize: 9, color: MUTED, fontStyle: 'italic' },
+  otherAvailableDice: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4,
+  },
+  otherDiceGroup: {
+    flexDirection: 'row', alignItems: 'center', gap: 1,
+    backgroundColor: BG, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2,
+  },
+  otherDiceGroupEmoji: { fontSize: 12 },
+  otherDiceGroupCount: { fontSize: 9, fontWeight: '800' },
+  // legado (por si alguna referencia queda)
+  otherPlayer:   { flex: 1 },
+  otherPlayerOff:{ opacity: 0.4 },
 
   // Sección
   section:      { marginBottom: 16 },
@@ -1207,6 +1524,16 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     color: GOLD,
   },
+  // Botón flotante predicción
+  floatingPredBtn: {
+    position: 'absolute', bottom: 24, right: 20,
+    backgroundColor: PURPLE,
+    borderRadius: 24, paddingVertical: 12, paddingHorizontal: 20,
+    shadowColor: PURPLE, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.6, shadowRadius: 12, elevation: 20,
+    zIndex: 100,
+  },
+  floatingPredBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
 
   // Turno
   turnIndicator: {
@@ -1231,31 +1558,58 @@ const styles = StyleSheet.create({
   countdownFill: { height: 4, borderRadius: 2 },
   countdownNum:  { fontSize: 12, fontWeight: '800', minWidth: 28, textAlign: 'right' },
 
-  // Modal predicción
-  modalOverlay: {
-    flex: 1, backgroundColor: '#00000088',
-    alignItems: 'center', justifyContent: 'center', padding: 20,
+  // Bottom Sheet predicción
+  bsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000000',
+    zIndex: 49,
   },
-  modalCard: {
-    backgroundColor: CARD, borderRadius: 24,
-    borderWidth: 1, borderColor: PURPLE + '55',
-    padding: 24, width: '100%',
-    shadowColor: PURPLE, shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5, shadowRadius: 20, elevation: 20,
+  bsContainer: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    zIndex: 50,
+    backgroundColor: CARD,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    borderWidth: 1, borderColor: PURPLE + '40',
+    paddingHorizontal: 20, paddingBottom: 32, paddingTop: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.4, shadowRadius: 20, elevation: 30,
   },
-  modalLaunch: {
+  bsHandleRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', marginBottom: 12, position: 'relative',
+  },
+  bsHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: BORDER,
+  },
+  bsCollapseBtn: {
+    position: 'absolute', right: 0,
+    backgroundColor: PURPLE + '25', borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderWidth: 1, borderColor: PURPLE + '50',
+  },
+  bsCollapseBtnText: { fontSize: 11, fontWeight: '700', color: PURPLE },
+  bsCollapsedContent: { alignItems: 'center', paddingVertical: 8, gap: 6 },
+  bsCollapsedLabel: { fontSize: 11, color: MUTED },
+  bsCollapsedValue: { fontSize: 16, fontWeight: '800' },
+  bsCollapsedHint: { fontSize: 12, color: MUTED, fontStyle: 'italic' },
+  bsConfirmBtnSmall: {
+    backgroundColor: PURPLE, borderRadius: 12,
+    paddingVertical: 10, paddingHorizontal: 24, alignItems: 'center', marginTop: 4,
+  },
+  bsLaunch: {
     fontSize: 10, fontWeight: '800', color: PURPLE,
-    letterSpacing: 3, textAlign: 'center', marginBottom: 6,
+    letterSpacing: 3, textAlign: 'center', marginBottom: 4,
   },
-  modalTitle: {
-    fontSize: 22, fontWeight: '900', color: TEXT,
-    textAlign: 'center', marginBottom: 4,
+  bsTitle: {
+    fontSize: 20, fontWeight: '900', color: TEXT,
+    textAlign: 'center', marginBottom: 2,
   },
-  modalSub: {
-    fontSize: 13, color: MUTED, textAlign: 'center', marginBottom: 20,
+  bsSub: {
+    fontSize: 12, color: MUTED, textAlign: 'center', marginBottom: 16,
   },
-  predictionOptions: { gap: 10, marginBottom: 20 },
-  predictionOption: {
+  bsOptions: { gap: 8, marginBottom: 16 },
+  bsOption: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: BG, borderRadius: 14, borderWidth: 1.5,
     padding: 14, gap: 12,
@@ -1272,11 +1626,11 @@ const styles = StyleSheet.create({
     width: 22, height: 22, borderRadius: 11,
     alignItems: 'center', justifyContent: 'center',
   },
-  predictionCheckText: { fontSize: 12, fontWeight: '900', color: '#000' },
-  confirmBtn: {
+  bsOptionCheckText: { fontSize: 10, fontWeight: '900', color: '#000' },
+  bsConfirmBtn: {
     backgroundColor: PURPLE, borderRadius: 14,
-    paddingVertical: 16, alignItems: 'center',
+    paddingVertical: 15, alignItems: 'center',
   },
-  confirmBtnDisabled: { backgroundColor: BORDER },
-  confirmBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  bsConfirmBtnDisabled: { backgroundColor: BORDER },
+  bsConfirmBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 });

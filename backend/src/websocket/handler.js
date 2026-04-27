@@ -3,8 +3,7 @@ const {
   createRoom, getRoomById, getRoomByCode,
   removeRoom, getRoomSafeState, getRoomStateForSpectator,
   getCurrentTurnPlayerId, buildTurnOrder,
-} = require('../rooms/roomManager');
-
+} = require('../rooms/roommanager');
 const {
   TOTAL_ROUNDS, ROUNDS_PER_LAUNCH,
   getLaunchNumber, isFirstRoundOfLaunch, isLastRoundOfLaunch,
@@ -14,6 +13,7 @@ const {
   resolveRound, getWinner,
 } = require('../game/gameEngine');
 const { persistGameResult } = require('../db/repository');
+const { updatePlayerStats } = require('../db/playerRepository');
 
 const TURN_TIMEOUT_MS        = 30 * 1000;
 const RECONNECT_WINDOW_MS    = 2 * 60 * 1000;
@@ -413,16 +413,41 @@ async function endRound(room) {
 
 async function endGame(room) {
   room.status = 'finished';
-  const winner = getWinner(room);
+
+  // Ordenar jugadores por puntos totales para determinar podio
+  const rankedPlayers = [...room.players.values()]
+    .sort((a, b) => b.totalPoints - a.totalPoints);
+
+  const winner = rankedPlayers[0];
+
+  // Construir info del podio para enviar al cliente
+  const podium = rankedPlayers.slice(0, 3).map((p, i) => ({
+    id: p.id, name: p.name, totalPoints: p.totalPoints, position: i + 1,
+  }));
+
   broadcastToRoom(room, 'game_over', (pid) => ({
     winner: { id: winner.id, name: winner.name, totalPoints: winner.totalPoints },
-    roundLogs: room.roundLogs, state: getRoomSafeState(room, pid),
+    podium,
+    roundLogs: room.roundLogs,
+    state: getRoomSafeState(room, pid),
   }));
+
   try {
     await persistGameResult(room);
     console.log(`✅ Partida ${room.id} persistida`);
   } catch (err) {
     console.error(`❌ Error persistiendo:`, err.message);
+  }
+
+  // Actualizar estadísticas globales solo para el podio (top 3)
+  // Solo jugadores registrados (con cuenta) acumulan puntos globales
+  try {
+    for (let i = 0; i < Math.min(3, rankedPlayers.length); i++) {
+      const p = rankedPlayers[i];
+      await updatePlayerStats(p.name, p.totalPoints, i + 1);
+    }
+  } catch (err) {
+    console.error(`❌ Error actualizando stats:`, err.message);
   }
 }
 
