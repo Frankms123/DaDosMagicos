@@ -3,7 +3,7 @@ const {
   createRoom, getRoomById, getRoomByCode,
   removeRoom, getRoomSafeState, getRoomStateForSpectator,
   getCurrentTurnPlayerId, buildTurnOrder,
-} = require('../rooms/roomManager');
+} = require('../rooms/roommanager');
 const {
   TOTAL_ROUNDS, ROUNDS_PER_LAUNCH,
   getLaunchNumber, isFirstRoundOfLaunch, isLastRoundOfLaunch,
