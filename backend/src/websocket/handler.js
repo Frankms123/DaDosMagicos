@@ -4,6 +4,7 @@ const {
   removeRoom, getRoomSafeState, getRoomStateForSpectator,
   getCurrentTurnPlayerId, buildTurnOrder,
 } = require('../rooms/roomManager');
+
 const {
   TOTAL_ROUNDS, ROUNDS_PER_LAUNCH,
   getLaunchNumber, isFirstRoundOfLaunch, isLastRoundOfLaunch,
@@ -532,6 +533,7 @@ const EVENT_HANDLERS = {
   make_prediction: (ws, p) => handleMakePrediction(ws, p),
   select_dice:     (ws, p) => handleSelectDice(ws, p),
   start_game:      (ws) => handleStartGame(ws),
+ main
 };
 
 function handleConnection(ws) {
