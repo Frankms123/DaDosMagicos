@@ -122,6 +122,15 @@ function buildPlayerList(room, requestingPlayerId) {
     const hand = rawPresented.length > 0 && !hasHiddenMasked ? player.hand : null;
     const visibleDice = player.hasRolled ? (player.allDice ?? []).slice(0, 9) : [];
 
+    // Índices usados visibles para oponentes — solo 0-8, sin revelar si usó ocultos
+    const usedVisibleIndices = isMe
+      ? player.usedDiceIndices
+      : (player.usedDiceIndices ?? []).filter(i => i < 9);
+
+    // Dados ocultos restantes: cuántos NO han sido usados (índices 9 y 10)
+    const hiddenUsedCount = (player.usedDiceIndices ?? []).filter(i => i >= 9).length;
+    const hiddenDiceRemaining = player.hasRolled ? Math.max(0, 2 - hiddenUsedCount) : 0;
+
     return {
       id: pid,
       name: player.name,
@@ -130,7 +139,8 @@ function buildPlayerList(room, requestingPlayerId) {
       allDice: isMe ? player.allDice : null,
       visibleDice,
       hiddenDiceCount: player.hasRolled ? 2 : 0,
-      usedDiceIndices: isMe ? player.usedDiceIndices : null,       // solo el dueño
+      hiddenDiceRemaining,   // cuántos dados ocultos le quedan disponibles
+      usedDiceIndices: usedVisibleIndices,  // para oponentes: solo índices 0-8 usados
       presentedDiceIndices: isMe ? player.presentedDiceIndices : null, // solo el dueño
       presentedDice: maskedPresented,
       hasSelectedDice: rawPresented.length > 0,

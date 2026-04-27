@@ -1034,8 +1034,8 @@ export default function GameScreen({ route, navigation }) {
               : (p.presentedDice ?? []);
             const hasDice     = presented.length > 0;
 
-            // Dados propios: usar allDice del store (más fresco que el de players)
-            const diceSource    = isMe ? allDice : (p.allDice ?? []);
+            // Dados propios: allDice del store. Oponentes: visibleDice que envía el servidor (9 dados sin ocultos)
+            const diceSource    = isMe ? allDice : (p.visibleDice ?? []);
             const usedSource    = isMe ? usedDiceIndices : (p.usedDiceIndices ?? []);
 
             return (
@@ -1097,12 +1097,13 @@ export default function GameScreen({ route, navigation }) {
                 )}
 
                 {/* Dados disponibles — visibles individualmente por valor */}
-                {!hasDice && (gamePhase === 'predicting' || gamePhase === 'selecting') && diceSource.length > 0 && (
+                {!hasDice && diceSource.length > 0 && (
                   <View style={styles.miniDiceBoard}>
                     {[1,2,3,4,5,6].map(val => {
-                      // Dados de este valor que aun no fueron usados
-                      const available = diceSource
-                        .slice(0, 9) // solo visibles (0-8)
+                      // Para oponentes diceSource ya son solo los 9 visibles
+                      // Para el propio, slice(0,9) excluye los ocultos
+                      const visibles = isMe ? diceSource.slice(0, 9) : diceSource;
+                      const available = visibles
                         .map((v, i) => ({ v, i }))
                         .filter(d => d.v === val && !usedSource.includes(d.i));
                       if (available.length === 0) return null;
@@ -1121,16 +1122,38 @@ export default function GameScreen({ route, navigation }) {
                         </View>
                       );
                     })}
-                    {/* Dados ocultos disponibles */}
-                    {!usedSource.includes(9) && diceSource[9] !== undefined && (
-                      <View style={[styles.miniDiceHidden, { borderColor: BLUE + '50', backgroundColor: BLUE + '10' }]}>
-                        <Text style={[styles.miniDiceHiddenText, { color: BLUE }]}>Az</Text>
-                      </View>
-                    )}
-                    {!usedSource.includes(10) && diceSource[10] !== undefined && (
-                      <View style={[styles.miniDiceHidden, { borderColor: RED + '50', backgroundColor: RED + '10' }]}>
-                        <Text style={[styles.miniDiceHiddenText, { color: RED }]}>Ro</Text>
-                      </View>
+                    {/* Dados ocultos disponibles — fila separada */}
+                    {isMe ? (
+                      // Propio: verificar por índice exacto
+                      ((!usedSource.includes(9) && allDice[9] !== undefined) ||
+                       (!usedSource.includes(10) && allDice[10] !== undefined)) && (
+                        <View style={styles.miniDiceHiddenRow}>
+                          {!usedSource.includes(9) && allDice[9] !== undefined && (
+                            <View style={[styles.miniDiceHidden, { borderColor: BLUE + '50', backgroundColor: BLUE + '10' }]}>
+                              <Text style={[styles.miniDiceHiddenText, { color: BLUE }]}>Azul</Text>
+                            </View>
+                          )}
+                          {!usedSource.includes(10) && allDice[10] !== undefined && (
+                            <View style={[styles.miniDiceHidden, { borderColor: RED + '50', backgroundColor: RED + '10' }]}>
+                              <Text style={[styles.miniDiceHiddenText, { color: RED }]}>Rojo</Text>
+                            </View>
+                          )}
+                        </View>
+                      )
+                    ) : (
+                      // Oponente: usar hiddenDiceRemaining (cuántos ocultos le quedan)
+                      (p.hiddenDiceRemaining ?? 0) > 0 && (
+                        <View style={styles.miniDiceHiddenRow}>
+                          <View style={[styles.miniDiceHidden, { borderColor: BLUE + '50', backgroundColor: BLUE + '10' }]}>
+                            <Text style={[styles.miniDiceHiddenText, { color: BLUE }]}>Azul</Text>
+                          </View>
+                          {(p.hiddenDiceRemaining ?? 0) >= 2 && (
+                            <View style={[styles.miniDiceHidden, { borderColor: RED + '50', backgroundColor: RED + '10' }]}>
+                              <Text style={[styles.miniDiceHiddenText, { color: RED }]}>Rojo</Text>
+                            </View>
+                          )}
+                        </View>
+                      )
                     )}
                   </View>
                 )}
@@ -1502,11 +1525,14 @@ const styles = StyleSheet.create({
     flexDirection: 'column', gap: 3, alignItems: 'center',
   },
   miniDiceHidden: {
-    width: 22, height: 22, borderRadius: 6,
+    width: 25, height: 22, borderRadius: 6,
     borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
     marginTop: 3,
   },
   miniDiceHiddenText: { fontSize: 8, fontWeight: '900' },
+  miniDiceHiddenRow: {
+    width: '100%', flexDirection: 'row', gap: 4, marginTop: 4,
+  },
 
   // Bottom sheet prediccion
   bsOverlay: {
