@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import useGameStore from '../store/useGameStore';
 import socketService from '../services/socketService';
+import { API_URL } from '../services/apiService';
 
 // ─── Colores ──────────────────────────────────────────────────────────────────
 const BG     = '#0F0F1A';
@@ -140,6 +141,9 @@ export default function GameOverScreen({ navigation }) {
   }, [playerName]);
 
   const [rematchLoading, setRematchLoading] = useState(false);
+  const [playerStats, setPlayerStats]     = useState(null);
+  const [globalRanking, setGlobalRanking] = useState([]);
+  const [podiumPoints, setPodiumPoints]   = useState(null); // puntos ganados al perfil
 
   // Animaciones del banner
   const bannerScale   = useRef(new Animated.Value(0.5)).current;
@@ -156,6 +160,32 @@ export default function GameOverScreen({ navigation }) {
       Animated.timing(starRotate, { toValue: 1, duration: 4000, useNativeDriver: true })
     ).start();
   }, []);
+
+  // Cargar stats del jugador y ranking global
+  useEffect(() => {
+    const currentName = playerNameRef.current || playerName;
+    if (!currentName) return;
+
+    // Stats del jugador actual
+    fetch(`${API_URL}/stats/player/${encodeURIComponent(currentName)}`)
+      .then(r => r.json())
+      .then(data => { if (data.stats) setPlayerStats(data.stats); })
+      .catch(() => {});
+
+    // Ranking global top 5
+    fetch(`${API_URL}/stats/ranking?limit=5`)
+      .then(r => r.json())
+      .then(data => { if (data.ranking) setGlobalRanking(data.ranking); })
+      .catch(() => {});
+
+    // Determinar si el jugador está en el podio de esta partida
+    if (gameOver?.podium) {
+      const myPodium = gameOver.podium.find(
+        p => p.name === currentName || p.id === playerId
+      );
+      if (myPodium) setPodiumPoints(myPodium);
+    }
+  }, [gameOver]);
 
   const rotate = starRotate.interpolate({
     inputRange: [0, 1], outputRange: ['0deg', '360deg'],
@@ -253,6 +283,83 @@ export default function GameOverScreen({ navigation }) {
             ))}
           </View>
         </View>
+
+        {/* ── Puntos al perfil global ── */}
+        {podiumPoints && (
+          <View style={[
+            styles.podiumBadge,
+            podiumPoints.position === 1 && { borderColor: GOLD + '60', backgroundColor: GOLD + '10' },
+            podiumPoints.position === 2 && { borderColor: SILVER + '60', backgroundColor: SILVER + '10' },
+            podiumPoints.position === 3 && { borderColor: BRONZE + '60', backgroundColor: BRONZE + '10' },
+          ]}>
+            <Text style={styles.podiumBadgeEmoji}>
+              {['🥇','🥈','🥉'][podiumPoints.position - 1]}
+            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.podiumBadgeTitle}>¡Puntos guardados en tu perfil!</Text>
+              <Text style={styles.podiumBadgeDesc}>
+                +{podiumPoints.totalPoints} pts · posición {podiumPoints.position}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Stats personales ── */}
+        {playerStats && (
+          <View style={styles.statsCard}>
+            <Text style={styles.statsCardTitle}>TU PERFIL GLOBAL</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{playerStats.totalScore ?? 0}</Text>
+                <Text style={styles.statLabel}>pts totales</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{playerStats.gamesPlayed ?? 0}</Text>
+                <Text style={styles.statLabel}>partidas</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{playerStats.podiums ?? 0}</Text>
+                <Text style={styles.statLabel}>podios</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{playerStats.wins ?? 0}</Text>
+                <Text style={styles.statLabel}>victorias</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── Ranking global ── */}
+        {globalRanking.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>🌍 RANKING GLOBAL</Text>
+            <View style={styles.globalRankingCard}>
+              {globalRanking.map((p, i) => {
+                const isMe = p.name === (playerNameRef.current || playerName);
+                return (
+                  <View key={p.name} style={[
+                    styles.globalRankRow,
+                    isMe && styles.globalRankRowMe,
+                    i === 0 && styles.globalRankRowFirst,
+                  ]}>
+                    <Text style={styles.globalRankMedal}>
+                      {['🥇','🥈','🥉'][i] ?? `${i+1}`}
+                    </Text>
+                    <Text style={[styles.globalRankName, isMe && { color: '#C4B5FD' }]} numberOfLines={1}>
+                      {p.name}{isMe ? ' (tú)' : ''}
+                    </Text>
+                    <Text style={[styles.globalRankScore, i === 0 && { color: GOLD }]}>
+                      {p.totalScore} pts
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {/* ── Botones ── */}
         <View style={styles.buttons}>
@@ -376,4 +483,45 @@ const styles = StyleSheet.create({
   },
   exitBtnText: { fontSize: 17, fontWeight: '600', color: MUTED },
   btnDisabled: { opacity: 0.5 },
+
+  // Podio badge
+  podiumBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: PURPLE + '10', borderRadius: 16, borderWidth: 1.5,
+    borderColor: PURPLE + '40', padding: 16, marginBottom: 16,
+  },
+  podiumBadgeEmoji: { fontSize: 28 },
+  podiumBadgeTitle: { fontSize: 14, fontWeight: '800', color: TEXT },
+  podiumBadgeDesc:  { fontSize: 12, color: MUTED, marginTop: 2 },
+
+  // Stats personales
+  statsCard: {
+    backgroundColor: CARD, borderRadius: 16, borderWidth: 1,
+    borderColor: BORDER, padding: 16, marginBottom: 16,
+  },
+  statsCardTitle: {
+    fontSize: 9, fontWeight: '700', color: MUTED,
+    letterSpacing: 2, marginBottom: 12,
+  },
+  statsRow: { flexDirection: 'row', alignItems: 'center' },
+  statItem: { flex: 1, alignItems: 'center' },
+  statValue: { fontSize: 22, fontWeight: '900', color: GOLD },
+  statLabel: { fontSize: 10, color: MUTED, marginTop: 2 },
+  statDivider: { width: 1, height: 32, backgroundColor: BORDER },
+
+  // Ranking global
+  globalRankingCard: {
+    backgroundColor: CARD, borderRadius: 14,
+    borderWidth: 1, borderColor: BORDER, overflow: 'hidden',
+  },
+  globalRankRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 12,
+    gap: 12, borderBottomWidth: 1, borderBottomColor: BORDER,
+  },
+  globalRankRowMe:    { backgroundColor: PURPLE + '0D' },
+  globalRankRowFirst: { backgroundColor: GOLD + '08' },
+  globalRankMedal:    { fontSize: 18, width: 28 },
+  globalRankName:     { flex: 1, fontSize: 14, fontWeight: '700', color: TEXT },
+  globalRankScore:    { fontSize: 16, fontWeight: '800', color: MUTED },
 });
