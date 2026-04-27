@@ -10,18 +10,22 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
+import { playSound } from '../services/soundService';
 import useGameStore from '../store/useGameStore';
+import MagicBackground from '../components/MagicBackground';
+import GameButton from '../components/GameButton';
+import {colors, shadows} from '../theme';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
-const BG     = '#0F0F1A';
-const CARD   = '#1A1A2E';
-const BORDER = '#2A2A45';
-const TEXT   = '#E2E8F0';
-const MUTED  = '#64748B';
-const PURPLE = '#7C3AED';
-const GOLD   = '#F59E0B';
-const GREEN  = '#10B981';
-const RED    = '#EF4444';
+const BG     = colors.bg;
+const CARD   = colors.card;
+const BORDER = colors.border;
+const TEXT   = colors.text;
+const MUTED  = colors.muted;
+const PURPLE = colors.purple;
+const GOLD   = colors.gold;
+const GREEN  = colors.green;
+const RED    = colors.red;
 
 const AVATAR_COLORS = ['#7C3AED','#F59E0B','#10B981','#EF4444','#3B82F6','#EC4899'];
 
@@ -62,10 +66,10 @@ function PlayerCard({ player, index, myPlayerId }) {
           {player.name}{isMe ? '  (tú)' : ''}
         </Text>
         <Text style={styles.playerStatus}>
-          {!connected    ? '⚠ Desconectado'
-           : isHost      ? '👑 Host'
-           : player.isReady ? '✅ Listo'
-           : '⏳ Esperando'}
+          {!connected    ? 'Desconectado'
+           : isHost      ? 'Host'
+           : player.isReady ? 'Listo'
+           : 'Esperando'}
         </Text>
       </View>
 
@@ -128,6 +132,48 @@ function PulseDot() {
 }
 
 // ─── Pantalla principal ───────────────────────────────────────────────────────
+function StartCountdown({ countdown }) {
+  const scale = useRef(new Animated.Value(0.7)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    scale.setValue(0.7);
+    opacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 80,
+        friction: 7,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [countdown, opacity, scale]);
+
+  return (
+    <View style={styles.countdownOverlay}>
+      <Animated.Text
+        style={[
+          styles.countdownNum,
+          {
+            opacity,
+            transform: [{ scale }],
+          },
+        ]}
+      >
+        {countdown === 0 ? 'GO' : countdown}
+      </Animated.Text>
+      <Text style={styles.countdownSub}>
+        {countdown === 0 ? '¡A jugar!' : 'Preparando la mesa...'}
+      </Text>
+    </View>
+  );
+}
+
 export default function WaitingRoomScreen({ route, navigation }) {
   const { roomCode, playerName, isHost, isSpectator } = route.params;
   const [countdown, setCountdown] = useState(null);
@@ -139,7 +185,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
 
   // Escuchar game_starting para mostrar countdown
   useEffect(() => {
-    const off = socketService.on('game_starting', () => setCountdown(3));
+    const off = socketService.on('game_starting', (payload) => setCountdown(payload?.countdown ?? 3));
     // También reaccionar a round_started (lo maneja useWebSocket navegando a Game)
     return () => off();
   }, []);
@@ -165,6 +211,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
   }, []);
 
   const handleShare = async () => {
+    playSound('click', 0.6);
     try {
       await Share.share({
         message: `¡Únete a mi partida de Dado Triple!\nCódigo de sala: ${roomCode}\n\nDescarga la app y usa este código para unirte.`,
@@ -173,6 +220,8 @@ export default function WaitingRoomScreen({ route, navigation }) {
   };
 
   const handleStartGame = () => {
+    if (countdown !== null) return;
+    playSound('click', 0.7);
     if (players.length < 2) {
       Alert.alert('¡Espera!', 'Necesitas al menos 2 jugadores para iniciar.');
       return;
@@ -182,6 +231,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
   };
 
   const handleBack = () => {
+    playSound('click', 0.55);
     socketService.disconnect();
     useGameStore.getState().resetGame();
     navigation.navigate('Lobby');
@@ -192,6 +242,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <MagicBackground intensity={0.85} />
       <View style={styles.root}>
 
         {/* ── Header ── */}
@@ -208,7 +259,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
           <Text style={styles.codeLabel}>CÓDIGO DE SALA</Text>
           <Text style={styles.codeValue}>{roomCode}</Text>
           <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.8}>
-            <Text style={styles.shareBtnText}>📤 Compartir</Text>
+            <Text style={styles.shareBtnText}>Compartir</Text>
           </TouchableOpacity>
         </View>
 
@@ -221,7 +272,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
               : `Esperando jugadores · ${players.length}/${maxPlayers}`}
           </Text>
           {spectators.length > 0 && (
-            <Text style={styles.spectatorCount}>👁 {spectators.length}</Text>
+            <Text style={styles.spectatorCount}>Ver {spectators.length}</Text>
           )}
         </View>
 
@@ -254,7 +305,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
         {spectators.length > 0 && (
           <View style={styles.spectatorsRow}>
             <Text style={styles.spectatorsText}>
-              👁 {spectators.map(s => s.name).join(', ')} {spectators.length === 1 ? 'está' : 'están'} observando
+              {spectators.map(s => s.name).join(', ')} {spectators.length === 1 ? 'está' : 'están'} observando
             </Text>
           </View>
         )}
@@ -262,19 +313,20 @@ export default function WaitingRoomScreen({ route, navigation }) {
         {/* ── Botón host ── */}
         {isHost && !isSpectator && (
           <View style={styles.footer}>
-            <TouchableOpacity
+            <GameButton
               style={[styles.startBtn, players.length < 2 && styles.startBtnDisabled]}
               onPress={handleStartGame}
-              activeOpacity={0.85}
+              disabled={players.length < 2 || countdown !== null}
+              sound={null}
             >
-              <Text style={styles.startBtnText}>🎲 Iniciar Partida</Text>
-            </TouchableOpacity>
+              <Text style={styles.startBtnText}>Iniciar partida</Text>
+            </GameButton>
             {players.length < 2 && (
               <Text style={styles.startHint}>Mínimo 2 jugadores para iniciar</Text>
             )}
             {players.length >= 2 && (
               <Text style={[styles.startHint, { color: GREEN }]}>
-                ✓ O espera — inicia automáticamente con 4 jugadores
+                O espera: inicia automáticamente con 4 jugadores
               </Text>
             )}
           </View>
@@ -284,22 +336,13 @@ export default function WaitingRoomScreen({ route, navigation }) {
         {!isHost && !isSpectator && (
           <View style={styles.footer}>
             <View style={styles.waitingBox}>
-              <Text style={styles.waitingBoxText}>⏳ Esperando que el host inicie...</Text>
+              <Text style={styles.waitingBoxText}>Esperando que el host inicie...</Text>
             </View>
           </View>
         )}
 
         {/* ── Countdown overlay ── */}
-        {countdown !== null && (
-          <View style={styles.countdownOverlay}>
-            <Text style={styles.countdownNum}>
-              {countdown === 0 ? '🎲' : countdown}
-            </Text>
-            <Text style={styles.countdownSub}>
-              {countdown === 0 ? '¡A jugar!' : 'Iniciando partida...'}
-            </Text>
-          </View>
-        )}
+        {countdown !== null && <StartCountdown countdown={countdown} />}
       </View>
     </SafeAreaView>
   );
@@ -307,7 +350,7 @@ export default function WaitingRoomScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
-  root: { flex: 1, backgroundColor: BG, paddingHorizontal: 20, paddingTop: 8 },
+  root: { flex: 1, backgroundColor: 'transparent', paddingHorizontal: 20, paddingTop: 8 },
 
   header: {
     flexDirection: 'row', alignItems: 'center',
@@ -322,8 +365,7 @@ const styles = StyleSheet.create({
     backgroundColor: CARD, borderRadius: 20,
     borderWidth: 1, borderColor: BORDER,
     padding: 20, alignItems: 'center', marginBottom: 18,
-    shadowColor: PURPLE, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, shadowRadius: 12, elevation: 8,
+    ...shadows.purple,
   },
   codeLabel: { fontSize: 10, fontWeight: '700', color: MUTED, letterSpacing: 2, marginBottom: 8 },
   codeValue: { fontSize: 42, fontWeight: '900', color: GOLD, letterSpacing: 10, marginBottom: 14 },
