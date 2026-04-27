@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
+import useGameStore from '../store/useGameStore';
 import { playSound } from '../services/soundService';
 import MagicBackground from '../components/MagicBackground';
 import DiceFace from '../components/DiceFace';
