@@ -286,59 +286,117 @@ function allPlayersSelectedDice(room) {
 
 function resolveRound(room) {
   const connectedPlayers = [...room.players.entries()].filter(([, p]) => p.isConnected);
-  const playerHands = connectedPlayers.map(([pid, p]) => ({ playerId: pid, hand: p.hand }));
-  const pointsMap = calculateRoundPoints(playerHands);
+  const playerHands      = connectedPlayers.map(([pid, p]) => ({ playerId: pid, hand: p.hand }));
+  const pointsMap        = calculateRoundPoints(playerHands);
+
+  const isLast     = isLastRoundOfLaunch(room.currentRound);
+  const launchNum  = getLaunchNumber(room.currentRound);
+
+  // Ranking de posiciones para esta ronda (para saber cuántos puntos base le tocaron)
+  const ranked = [...connectedPlayers]
+    .map(([pid, p]) => ({ pid, hand: p.hand }))
+    .sort((a, b) => compareHands(b.hand, a.hand));
+
+  // Detectar empates — jugadores con la misma posición lógica
+  function getPositionLabel(pid) {
+    const pos = ranked.findIndex(r => r.pid === pid);
+    if (pos === -1) return null;
+    // Ver si hay empate
+    const sameHand = ranked.filter(r =>
+      compareHands(r.hand, ranked[pos].hand) === 0
+    );
+    if (sameHand.length > 1) return `${pos + 1}° (empate ×${sameHand.length})`;
+    return `${pos + 1}°`;
+  }
 
   const snapshotPlayers = [];
-  const isLast = isLastRoundOfLaunch(room.currentRound);
 
   for (const [pid, player] of connectedPlayers) {
-    const roundPoints = pointsMap.get(pid) ?? 0;
-    const newLaunchPoints = Math.round((player.launchPoints + roundPoints) * 10) / 10;
+    const basePoints      = pointsMap.get(pid) ?? 0;                          // 6, 3, 1 o 0
+    const newLaunchPoints = Math.round((player.launchPoints + basePoints) * 10) / 10;
 
-    // Al final del lanzamiento aplicar bonus de predicción
-    let bonusPoints = 0;
-    let predictionHit = false;
+    // Bonus de predicción — solo al final del lanzamiento
+    let predictionBonus = 0;
+    let predictionHit   = false;
 
     if (isLast && player.prediction) {
-      const finalPoints = applyPredictionBonus(player.prediction, newLaunchPoints);
-      bonusPoints = Math.round((finalPoints - newLaunchPoints) * 10) / 10;
-      predictionHit = checkPrediction(player.prediction, newLaunchPoints);
+      const withBonus = applyPredictionBonus(player.prediction, newLaunchPoints);
+      predictionBonus = Math.round((withBonus - newLaunchPoints) * 10) / 10;
+      predictionHit   = checkPrediction(player.prediction, newLaunchPoints);
     }
 
-    const totalPoints = Math.round((player.totalPoints + roundPoints + bonusPoints) * 10) / 10;
+    const totalPoints = Math.round(
+      (player.totalPoints + basePoints + predictionBonus) * 10
+    ) / 10;
 
-    const updatedPlayer = {
-      ...player,
-      roundPoints,
-      launchPoints: newLaunchPoints,
-      totalPoints,
-    };
-    room.players.set(pid, updatedPlayer);
+    // Dados disponibles al momento de presentar =
+    // allDice sin los ya usados en rondas anteriores del mismo lanzamiento
+    const previouslyUsed = player.usedDiceIndices.filter(
+      i => !player.presentedDiceIndices?.includes(i)
+    );
+    const availableDiceBeforeSelection = player.allDice
+      .map((val, idx) => ({ idx, val }))
+      .filter(d => !previouslyUsed.includes(d.idx));
+
+    room.players.set(pid, { ...player, roundPoints: basePoints, launchPoints: newLaunchPoints, totalPoints });
 
     snapshotPlayers.push({
-      id: pid,
+      id:   pid,
       name: player.name,
-      allDice: player.allDice,
-      presentedDice: player.presentedDice,
-      hand: player.hand,
-      roundPoints,
+
+      // ── Dados ──────────────────────────────────────────────────────────────
+      allDice:           player.allDice,              // 11 dados del lanzamiento
+      visibleDice:       player.allDice.slice(0, 9),  // índices 0-8
+      hiddenDice:        player.allDice.slice(9, 11), // índices 9-10
+      availableBeforeSelection: availableDiceBeforeSelection,
+      presentedDice:     player.presentedDice,
+      presentedIndices:  player.presentedDiceIndices ?? [],
+
+      // ── Mano ───────────────────────────────────────────────────────────────
+      hand:     player.hand,
+      position: getPositionLabel(pid),
+
+      // ── Puntuación ─────────────────────────────────────────────────────────
+      basePoints,          // puntos por posición (6/3/1/0) antes de cualquier bonus
+      predictionBonus,     // bonus por acertar la predicción (0 si no aplica o no acertó)
+      roundPoints: basePoints, // puntos netos de esta ronda (= basePoints, bonus se suma al total)
       launchPoints: newLaunchPoints,
       totalPoints,
-      prediction: player.prediction,
+
+      // ── Predicción (solo relevante en última ronda del lanzamiento) ────────
+      prediction:    player.prediction,
       predictionHit: isLast ? predictionHit : null,
-      bonusPoints: isLast ? bonusPoints : 0,
+
+      // ── Datos acumulados del lanzamiento ───────────────────────────────────
+      usedDiceIndices: player.usedDiceIndices,
     });
   }
 
-  snapshotPlayers.sort((a, b) => b.roundPoints - a.roundPoints);
+  snapshotPlayers.sort((a, b) => b.basePoints - a.basePoints);
+
+  // Resultado parcial del lanzamiento (solo en la última ronda)
+  let launchSummary = null;
+  if (isLast) {
+    launchSummary = snapshotPlayers.map(p => ({
+      id:             p.id,
+      name:           p.name,
+      prediction:     p.prediction,
+      predictionHit:  p.predictionHit,
+      launchPoints:   p.launchPoints,   // puntos base acumulados en las 3 rondas
+      predictionBonus:p.predictionBonus,
+      totalAfterLaunch: p.totalPoints,
+    }));
+  }
 
   return {
-    round: room.currentRound,
-    launch: getLaunchNumber(room.currentRound),
+    round:               room.currentRound,
+    launch:              launchNum,
+    roundInLaunch:       ((room.currentRound - 1) % 3) + 1, // 1, 2 o 3
     isLastRoundOfLaunch: isLast,
-    players: snapshotPlayers,
-    timestamp: new Date().toISOString(),
+    turnOrder:           [...room.turnOrder],   // orden en que presentaron esta ronda
+    players:             snapshotPlayers,
+    launchSummary,       // null si no es última ronda del lanzamiento
+    timestamp:           new Date().toISOString(),
   };
 }
 

@@ -3,20 +3,20 @@ const express = require('express');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const { handleConnection } = require('./websocket/handler');
-
-const cors = require('cors');
-const authRoutes = require('./routes/authRoutes');
 const { setupPlayerCollection } = require('./db/playerRepository');
+const authRoutes  = require('./routes/authRoutes');
+const statsRoutes = require('./routes/statsRoutes');
 
 const app = express();
+const cors = require('cors');
 app.use(cors());
 app.use(express.json());
 
-// Routes
-app.use('/api/auth', authRoutes);
+app.use('/api/auth',  authRoutes);
+app.use('/api/stats', statsRoutes);
 
-// Initialize DB Collections (Catch error to avoid crashing server on mongo failure)
-setupPlayerCollection().catch(err => console.error("Error starting Mongo connection:", err.message));
+// Initialize DB
+setupPlayerCollection().catch(err => console.error('Error Mongo:', err.message));
 
 // Health check
 app.get('/health', (req, res) => {
