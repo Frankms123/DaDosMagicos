@@ -120,6 +120,7 @@ function buildPlayerList(room, requestingPlayerId) {
     // La mano solo se muestra si no hay dados ocultos enmascarados
     const hasHiddenMasked = !isMe && maskedPresented.some(d => d === null);
     const hand = rawPresented.length > 0 && !hasHiddenMasked ? player.hand : null;
+    const visibleDice = player.hasRolled ? (player.allDice ?? []).slice(0, 9) : [];
 
     return {
       id: pid,
@@ -127,6 +128,8 @@ function buildPlayerList(room, requestingPlayerId) {
       isReady: player.isReady,
       hasRolled: player.hasRolled,
       allDice: isMe ? player.allDice : null,
+      visibleDice,
+      hiddenDiceCount: player.hasRolled ? 2 : 0,
       usedDiceIndices: isMe ? player.usedDiceIndices : null,       // solo el dueño
       presentedDiceIndices: isMe ? player.presentedDiceIndices : null, // solo el dueño
       presentedDice: maskedPresented,

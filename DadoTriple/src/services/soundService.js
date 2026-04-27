@@ -11,16 +11,9 @@ const SOUND_FILES = {
 };
 
 const sounds = {};
+const soundState = {};
 
-Object.entries(SOUND_FILES).forEach(([name, file]) => {
-  sounds[name] = new Sound(file, Sound.MAIN_BUNDLE, error => {
-    if (error) {
-      console.warn(`[sound] Could not load ${file}:`, error);
-    }
-  });
-});
-
-export function playSound(name, volume = 1) {
+function playLoadedSound(name, volume) {
   const sound = sounds[name];
   if (!sound) {
     return;
@@ -34,6 +27,42 @@ export function playSound(name, volume = 1) {
       }
     });
   });
+}
+
+Object.entries(SOUND_FILES).forEach(([name, file]) => {
+  soundState[name] = {
+    loaded: false,
+    pending: null,
+  };
+
+  sounds[name] = new Sound(file, Sound.MAIN_BUNDLE, error => {
+    if (error) {
+      console.warn(`[sound] Could not load ${file}:`, error);
+      return;
+    }
+
+    soundState[name].loaded = true;
+    if (soundState[name].pending) {
+      const {volume} = soundState[name].pending;
+      soundState[name].pending = null;
+      playLoadedSound(name, volume);
+    }
+  });
+});
+
+export function playSound(name, volume = 1) {
+  const sound = sounds[name];
+  const state = soundState[name];
+  if (!sound || !state) {
+    return;
+  }
+
+  if (!state.loaded) {
+    state.pending = {volume};
+    return;
+  }
+
+  playLoadedSound(name, volume);
 }
 
 export function releaseSounds() {

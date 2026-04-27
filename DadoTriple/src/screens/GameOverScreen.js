@@ -5,25 +5,91 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  Animated, TouchableOpacity,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import useGameStore from '../store/useGameStore';
 import socketService from '../services/socketService';
 import { playSound } from '../services/soundService';
+import MagicBackground from '../components/MagicBackground';
+import GameButton from '../components/GameButton';
+import AnimatedNumber from '../components/AnimatedNumber';
+import {colors, shadows} from '../theme';
 
 // ─── Colores ──────────────────────────────────────────────────────────────────
-const BG     = '#0F0F1A';
-const CARD   = '#1A1A2E';
-const BORDER = '#2A2A45';
-const TEXT   = '#E2E8F0';
-const MUTED  = '#64748B';
-const PURPLE = '#7C3AED';
-const GOLD   = '#F59E0B';
-const GREEN  = '#10B981';
-const RED    = '#EF4444';
-const SILVER = '#94A3B8';
-const BRONZE = '#CD7C3E';
+const BG     = colors.bg;
+const CARD   = colors.card;
+const BORDER = colors.border;
+const TEXT   = colors.text;
+const MUTED  = colors.muted;
+const PURPLE = colors.purple;
+const GOLD   = colors.gold;
+const SILVER = colors.silver;
+const BRONZE = colors.bronze;
+
+function FinaleSparkles({ active }) {
+  const symbols = ['✦', '◆', '◇', '⚀', '⚂', '⚄'];
+  const anims = useRef(symbols.map(() => new Animated.Value(0))).current;
+
+  useEffect(() => {
+    if (!active) return undefined;
+
+    const loops = anims.map((anim, index) => Animated.loop(
+      Animated.sequence([
+        Animated.delay(index * 180),
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 1800 + index * 120,
+          useNativeDriver: true,
+        }),
+        Animated.timing(anim, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ]),
+    ));
+
+    loops.forEach(loop => loop.start());
+    return () => loops.forEach(loop => loop.stop());
+  }, [active, anims]);
+
+  return (
+    <View pointerEvents="none" style={styles.sparkles}>
+      {symbols.map((symbol, index) => {
+        const drift = anims[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [18, -28 - index * 3],
+        });
+        const opacity = anims[index].interpolate({
+          inputRange: [0, 0.25, 0.8, 1],
+          outputRange: [0, 0.75, 0.75, 0],
+        });
+        const rotate = anims[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: ['0deg', `${index % 2 ? '-' : ''}180deg`],
+        });
+
+        return (
+          <Animated.Text
+            key={`${symbol}-${index}`}
+            style={[
+              styles.sparkle,
+              {
+                left: `${8 + index * 16}%`,
+                top: 34 + (index % 3) * 44,
+                color: index % 2 ? GOLD : PURPLE,
+                opacity,
+                transform: [{ translateY: drift }, { rotate }],
+              },
+            ]}>
+            {symbol}
+          </Animated.Text>
+        );
+      })}
+    </View>
+  );
+}
 
 // ─── Componente: Podio ────────────────────────────────────────────────────────
 function Podium({ players }) {
@@ -46,9 +112,9 @@ function Podium({ players }) {
   }, []);
 
   const SLOTS = [
-    { height: 90,  color: GOLD,   emoji: '🥇', label: '1°', fontSize: 16 },
-    { height: 64,  color: SILVER, emoji: '🥈', label: '2°', fontSize: 14 },
-    { height: 46,  color: BRONZE, emoji: '🥉', label: '3°', fontSize: 13 },
+    { height: 90,  color: GOLD,   label: '1°', fontSize: 16 },
+    { height: 64,  color: SILVER, label: '2°', fontSize: 14 },
+    { height: 46,  color: BRONZE, label: '3°', fontSize: 13 },
   ];
 
   // Display order: 2°, 1°, 3°
@@ -67,7 +133,9 @@ function Podium({ players }) {
             key={i}
             style={[styles.podiumSlot, { transform: [{ scale: anim }], opacity: anim }]}
           >
-            <Text style={styles.podiumEmoji}>{slot.emoji}</Text>
+            <View style={[styles.podiumRankMark, {borderColor: slot.color + '66', backgroundColor: slot.color + '18'}]}>
+              <Text style={[styles.podiumRankMarkText, {color: slot.color}]}>{slot.label}</Text>
+            </View>
             <Text style={[styles.podiumName, { fontSize: slot.fontSize }]} numberOfLines={2}>
               {player.name}
             </Text>
@@ -102,8 +170,7 @@ function RankRow({ player, rank, isMe, delay }) {
 
   const COLORS = [GOLD, SILVER, BRONZE];
   const color  = COLORS[rank] ?? MUTED;
-  const MEDALS = ['🥇', '🥈', '🥉'];
-  const medal  = MEDALS[rank] ?? `${rank + 1}°`;
+  const medal  = `${rank + 1}°`;
 
   return (
     <Animated.View style={[
@@ -172,14 +239,17 @@ export default function GameOverScreen({ navigation }) {
 
   useEffect(() => {
     if (!winner) return;
-    playSound(isWinner ? 'win' : 'lose', isWinner ? 0.85 : 0.75);
+    const timer = setTimeout(() => {
+      playSound(isWinner ? 'win' : 'lose', isWinner ? 0.85 : 0.75);
+    }, 220);
+    return () => clearTimeout(timer);
   }, [isWinner, winner]);
 
   const handleRematch = () => {
     playSound('click', 0.65);
     // Usar la ref que capturó el nombre antes de cualquier reset
     const currentName = playerNameRef.current || playerName || 'Jugador';
-    console.log('🎮 Revancha con nombre:', currentName);
+    console.log('Revancha con nombre:', currentName);
     setRematchLoading(true);
     resetGame();
 
@@ -214,6 +284,8 @@ export default function GameOverScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <MagicBackground intensity={isWinner ? 1.05 : 0.75} />
+      <FinaleSparkles active={!!winner} />
       <ScrollView
         style={styles.root}
         contentContainerStyle={styles.scroll}
@@ -226,16 +298,20 @@ export default function GameOverScreen({ navigation }) {
           { opacity: bannerOpacity, transform: [{ scale: bannerScale }] },
         ]}>
           <Animated.Text style={[styles.winnerStar, { transform: [{ rotate }] }]}>
-            ⭐
+            ◆
           </Animated.Text>
           <Text style={styles.winnerLabel}>
             {isWinner ? '¡GANASTE!' : 'FIN DE PARTIDA'}
           </Text>
           <Text style={styles.winnerName}>{winner?.name ?? '?'}</Text>
           <Text style={styles.winnerSub}>
-            {isWinner ? '¡Eres el campeón! 🎉' : `${winner?.name} ganó la partida`}
+            {isWinner ? 'Eres el campeón de la partida' : `${winner?.name} ganó la partida`}
           </Text>
-          <Text style={styles.winnerScore}>{winner?.totalPoints ?? 0} pts</Text>
+          <AnimatedNumber
+            value={winner?.totalPoints ?? 0}
+            suffix=" pts"
+            style={styles.winnerScore}
+          />
         </Animated.View>
 
         {/* ── Podio ── */}
@@ -264,24 +340,25 @@ export default function GameOverScreen({ navigation }) {
 
         {/* ── Botones ── */}
         <View style={styles.buttons}>
-          <TouchableOpacity
+          <GameButton
             style={[styles.rematchBtn, rematchLoading && styles.btnDisabled]}
             onPress={handleRematch}
             disabled={rematchLoading}
-            activeOpacity={0.85}
+            sound={null}
           >
             <Text style={styles.rematchBtnText}>
-              {rematchLoading ? '⏳ Creando sala...' : '🔁 Revancha'}
+              {rematchLoading ? 'Creando sala...' : 'Revancha'}
             </Text>
-          </TouchableOpacity>
+          </GameButton>
 
-          <TouchableOpacity
+          <GameButton
+            variant="quiet"
             style={styles.exitBtn}
             onPress={handleExit}
-            activeOpacity={0.85}
+            sound={null}
           >
-            <Text style={styles.exitBtnText}>🚪 Salir al Lobby</Text>
-          </TouchableOpacity>
+            <Text style={styles.exitBtnText}>Salir al Lobby</Text>
+          </GameButton>
         </View>
 
         <View style={{ height: 32 }} />
@@ -292,20 +369,29 @@ export default function GameOverScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: BG },
-  root:   { flex: 1, backgroundColor: BG },
+  root:   { flex: 1, backgroundColor: 'transparent' },
   scroll: { paddingHorizontal: 20, paddingTop: 20 },
+
+  sparkles: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+  },
+  sparkle: {
+    position: 'absolute',
+    fontSize: 24,
+    fontWeight: '900',
+  },
 
   // Banner ganador
   winnerBanner: {
     backgroundColor: CARD, borderRadius: 24,
     borderWidth: 1.5, borderColor: PURPLE + '55',
     padding: 28, alignItems: 'center', marginBottom: 28,
-    shadowColor: PURPLE, shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.4, shadowRadius: 20, elevation: 15,
+    ...shadows.purple,
   },
   winnerBannerGold: {
     borderColor: GOLD + '66',
-    shadowColor: GOLD,
+    ...shadows.gold,
   },
   winnerStar:  { fontSize: 48, marginBottom: 8 },
   winnerLabel: {
@@ -329,7 +415,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center', gap: 8, paddingHorizontal: 8,
   },
   podiumSlot:  { flex: 1, alignItems: 'center' },
-  podiumEmoji: { fontSize: 28, marginBottom: 6 },
+  podiumRankMark: {
+    minWidth: 42, height: 34, borderRadius: 10, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 8,
+  },
+  podiumRankMarkText: { fontSize: 14, fontWeight: '900' },
   podiumName:  {
     fontWeight: '700', color: TEXT, textAlign: 'center',
     marginBottom: 4, lineHeight: 20,
@@ -373,8 +463,7 @@ const styles = StyleSheet.create({
   rematchBtn: {
     backgroundColor: PURPLE, borderRadius: 16,
     paddingVertical: 18, alignItems: 'center',
-    shadowColor: PURPLE, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5, shadowRadius: 14, elevation: 10,
+    ...shadows.purple,
   },
   rematchBtnText: { fontSize: 18, fontWeight: '700', color: '#fff' },
   exitBtn: {

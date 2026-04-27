@@ -13,17 +13,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import socketService from '../services/socketService';
 import { playSound } from '../services/soundService';
 import useGameStore from '../store/useGameStore';
+import MagicBackground from '../components/MagicBackground';
+import GameButton from '../components/GameButton';
+import DiceFace from '../components/DiceFace';
+import {colors, shadows} from '../theme';
 
 // ─── Constantes de diseño ─────────────────────────────────────────────────────
-const BG       = '#0F0F1A';
-const CARD     = '#1A1A2E';
-const BORDER   = '#2A2A45';
-const TEXT     = '#E2E8F0';
-const MUTED    = '#64748B';
-const PURPLE   = '#7C3AED';
-const GOLD     = '#F59E0B';
-const SUCCESS  = '#10B981';
-const DANGER   = '#EF4444';
+const BG       = colors.bg;
+const CARD     = colors.card;
+const BORDER   = colors.border;
+const TEXT     = colors.text;
+const MUTED    = colors.muted;
+const PURPLE   = colors.purple;
+const GOLD     = colors.gold;
+const SUCCESS  = colors.green;
+const DANGER   = colors.red;
 
 // ─── Componente: Indicador de conexión ───────────────────────────────────────
 function ConnectionDot({ connected }) {
@@ -259,13 +263,16 @@ export default function LobbyScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <MagicBackground intensity={1.1} />
       <KeyboardAvoidingView
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {/* ── Header ── */}
         <Animated.View style={[styles.header, { transform: [{ scale: logoAnim }], opacity: logoAnim }]}>
-          <Text style={styles.logo}>🎲</Text>
+          <View style={styles.logoMark}>
+            <DiceFace value={3} size={62} pipColor={GOLD} faceColor={CARD} borderColor={GOLD + '88'} />
+          </View>
           <Text style={styles.title}>Dado Triple</Text>
           <Text style={styles.subtitle}>El Plan del Diablo — T2</Text>
 
@@ -291,7 +298,7 @@ export default function LobbyScreen() {
             {['create', 'join', 'spectator'].map((t) => (
               <TouchableOpacity key={t} style={styles.tab} onPress={() => switchTab(t)} activeOpacity={0.7}>
                 <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-                  {t === 'create' ? '＋ Crear' : t === 'join' ? '→ Unirse' : '👁 Ver'}
+                  {t === 'create' ? '+ Crear' : t === 'join' ? '→ Unirse' : 'Ver'}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -339,12 +346,12 @@ export default function LobbyScreen() {
           {/* Error */}
           {error && (
             <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
-              <Text style={styles.errorText}>⚠ {error}</Text>
+              <Text style={styles.errorText}>{error}</Text>
             </Animated.View>
           )}
 
           {/* Botón de acción */}
-          <TouchableOpacity
+          <GameButton
             style={[
               styles.actionBtn,
               tab === 'join'      && styles.actionBtnJoin,
@@ -353,18 +360,18 @@ export default function LobbyScreen() {
             ]}
             onPress={tab === 'create' ? handleCreate : tab === 'join' ? handleJoin : handleSpectator}
             disabled={loading}
-            activeOpacity={0.85}
+            sound={null}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.actionBtnText}>
-                {tab === 'create'    ? '🎲 Crear Sala'
-                 : tab === 'join'    ? '🚀 Unirse'
-                 : '👁 Entrar como espectador'}
+                {tab === 'create'    ? 'Crear sala'
+                 : tab === 'join'    ? 'Unirse'
+                 : 'Entrar como espectador'}
               </Text>
             )}
-          </TouchableOpacity>
+          </GameButton>
         </Animated.View>
 
         <Text style={styles.footer}>Dado Triple v1.0 · El Plan del Diablo T2</Text>
@@ -376,14 +383,17 @@ export default function LobbyScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
   root: {
-    flex: 1, backgroundColor: BG,
+    flex: 1, backgroundColor: 'transparent',
     alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 24,
   },
 
   // Header
   header: { alignItems: 'center', marginBottom: 32 },
-  logo: { fontSize: 64, marginBottom: 8 },
+  logoMark: {
+    width: 74, height: 74, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: GOLD + '10', borderWidth: 1, borderColor: GOLD + '40', marginBottom: 10,
+  },
   title: { fontSize: 32, fontWeight: '900', color: TEXT, letterSpacing: 1 },
   subtitle: { fontSize: 13, color: MUTED, marginTop: 4, letterSpacing: 0.5 },
   connectionRow: {
@@ -400,8 +410,7 @@ const styles = StyleSheet.create({
     width: '100%', backgroundColor: CARD,
     borderRadius: 24, borderWidth: 1, borderColor: BORDER,
     padding: 22,
-    shadowColor: PURPLE, shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3, shadowRadius: 24, elevation: 14,
+    ...shadows.purple,
   },
 
   // Tabs

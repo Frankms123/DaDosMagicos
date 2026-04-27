@@ -18,8 +18,11 @@ const { persistGameResult } = require('../db/repository');
 const TURN_TIMEOUT_MS        = 30 * 1000;
 const RECONNECT_WINDOW_MS    = 2 * 60 * 1000;
 const AUTO_PREDICT_TIMEOUT_MS = 15 * 1000;
+const GAME_START_COUNTDOWN_MS = 3600;
+const ROUND_RESULTS_DELAY_MS  = 10 * 1000;
 
 const clients          = new Map();
+const gameStartTimers  = new Map();
 const turnTimers       = new Map();   // roomId → timer
 const autoPredictTimers = new Map();  // playerId → timer
 const roomCleanupTimers = new Map();  // roomId → timer
@@ -41,6 +44,25 @@ function broadcastToRoom(room, type, payloadFn) {
     const ws = getWsForSpectator(sid);
     if (ws) send(ws, type, payloadFn(null));
   }
+}
+
+function scheduleGameStart(room, startedByName = 'Host') {
+  if (gameStartTimers.has(room.id) || room.status !== 'waiting') return;
+
+  broadcastToRoom(room, 'game_starting', (pid) => ({
+    state: getRoomSafeState(room, pid),
+    startedBy: startedByName,
+    countdown: 3,
+    countdownMs: GAME_START_COUNTDOWN_MS,
+  }));
+
+  const timer = setTimeout(() => {
+    gameStartTimers.delete(room.id);
+    const latestRoom = getRoomById(room.id);
+    if (latestRoom?.status === 'waiting') startRound(latestRoom);
+  }, GAME_START_COUNTDOWN_MS);
+
+  gameStartTimers.set(room.id, timer);
 }
 
 function getWsForPlayer(playerId) {
@@ -209,7 +231,9 @@ function handlePlayerReady(ws) {
   broadcastToRoom(room, 'player_ready', (pid) => ({
     state: getRoomSafeState(room, pid), readyPlayerId: meta.playerId,
   }));
-  if (room.players.size >= room.maxPlayers && allPlayersReady(room)) startRound(room);
+  if (room.players.size >= room.maxPlayers && allPlayersReady(room)) {
+    scheduleGameStart(room, 'Sala completa');
+  }
 }
 
 function handleStartGame(ws) {
@@ -221,11 +245,7 @@ function handleStartGame(ws) {
   if (room.players.size < 2) return sendError(ws, 'Se necesitan al menos 2 jugadores');
   const [hostId] = room.players.keys();
   if (meta.playerId !== hostId) return sendError(ws, 'Solo el host puede iniciar');
-  broadcastToRoom(room, 'game_starting', (pid) => ({
-    state: getRoomSafeState(room, pid),
-    startedBy: room.players.get(meta.playerId).name,
-  }));
-  startRound(room);
+  scheduleGameStart(room, room.players.get(meta.playerId).name);
 }
 
 function handleRollDice(ws) {
@@ -244,10 +264,13 @@ function handleRollDice(ws) {
   }));
 
   if (allPlayersRolled(room)) {
-    room.roundPhase = 'predicting';
-    broadcastToRoom(room, 'phase_changed', (pid) => ({
-      phase: 'predicting', state: getRoomSafeState(room, pid),
-    }));
+    setTimeout(() => {
+      if (room.roundPhase !== 'rolling') return;
+      room.roundPhase = 'predicting';
+      broadcastToRoom(room, 'phase_changed', (pid) => ({
+        phase: 'predicting', state: getRoomSafeState(room, pid),
+      }));
+    }, 900);
   }
 }
 
@@ -384,7 +407,7 @@ async function endRound(room) {
   if (room.currentRound >= TOTAL_ROUNDS) {
     await endGame(room);
   } else {
-    setTimeout(() => startRound(room), 3000);
+    setTimeout(() => startRound(room), ROUND_RESULTS_DELAY_MS);
   }
 }
 
@@ -533,7 +556,6 @@ const EVENT_HANDLERS = {
   make_prediction: (ws, p) => handleMakePrediction(ws, p),
   select_dice:     (ws, p) => handleSelectDice(ws, p),
   start_game:      (ws) => handleStartGame(ws),
- main
 };
 
 function handleConnection(ws) {
