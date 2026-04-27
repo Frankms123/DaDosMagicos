@@ -9,6 +9,7 @@ const statsRoutes = require('./routes/statsRoutes');
 
 const app = express();
 const cors = require('cors');
+app.set('trust proxy', 1); // Confía en el proxy de Render para el rate-limit
 app.use(cors());
 app.use(express.json());
 
