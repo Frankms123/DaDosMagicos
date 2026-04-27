@@ -1,4 +1,4 @@
-export const API_URL = 'http://192.168.0.10:3000/api'; // Cambiar por IP del servidor si cambia
+export const API_URL = 'https://dado-triple-backend.onrender.com/api'; // Cambiar por IP del servidor si cambia
 
 export const authApi = {
   register: async (name, email, password) => {
