@@ -126,9 +126,12 @@ function buildPlayerList(room, requestingPlayerId) {
       name: player.name,
       isReady: player.isReady,
       hasRolled: player.hasRolled,
-      allDice: isMe ? player.allDice : null,
-      usedDiceIndices: isMe ? player.usedDiceIndices : null,       // solo el dueño
-      presentedDiceIndices: isMe ? player.presentedDiceIndices : null, // solo el dueño
+      // Dados visibles (0-8) se muestran a todos; ocultos (9-10) solo al dueño
+      allDice: player.allDice.length > 0
+        ? (isMe ? player.allDice : [...player.allDice.slice(0, 9), null, null])
+        : (isMe ? player.allDice : []),
+      usedDiceIndices: isMe ? player.usedDiceIndices : null,
+      presentedDiceIndices: isMe ? player.presentedDiceIndices : null,
       presentedDice: maskedPresented,
       hasSelectedDice: rawPresented.length > 0,
       hand,
