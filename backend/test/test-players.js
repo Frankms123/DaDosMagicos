@@ -14,7 +14,7 @@
 const WebSocket = require('ws');
 const { TOTAL_ROUNDS, ROUNDS_PER_LAUNCH } = require('../src/game/gameEngine');
 
-const SERVER_URL = 'ws://localhost:3000'; // Cambia a ws://localhost:3000 para pruebas locales
+const SERVER_URL = 'wss://dado-triple-backend.onrender.com'; // Cambia a ws://localhost:3000 para pruebas locales
 
 let MY_PLAYER_ID = null;
 let MY_ROOM_CODE = null;
