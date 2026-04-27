@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { NavigationContainer, useNavigationState } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -125,40 +125,7 @@ function AppNavigator() {
   );
 }
 
-// ─── Wrapper con Tab Bar ──────────────────────────────────────────────────────
-function AppWithTabBar() {
-  return (
-    <NavigationContainer>
-      <NavigationContent />
-    </NavigationContainer>
-  );
-}
-
-function NavigationContent() {
-  const routeName = useNavigationState(state => {
-    if (!state) return 'Lobby';
-    const route = state.routes[state.index];
-    return route?.name ?? 'Lobby';
-  });
-
-  return (
-    <>
-      <AppNavigator />
-    </>
-  );
-}
-
-// ─── App con tab bar externa ──────────────────────────────────────────────────
-function InnerApp() {
-  return (
-    <NavigationContainer>
-      <InnerAppContent />
-    </NavigationContainer>
-  );
-}
-
-// Necesitamos acceder al navigation fuera del navigator — usamos una ref
-import { createNavigationContainerRef } from '@react-navigation/native';
+// ─── Navigation ref para TabBar externa ──────────────────────────────────────
 const navigationRef = createNavigationContainerRef();
 
 export default function App() {

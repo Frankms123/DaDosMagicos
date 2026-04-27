@@ -1,17 +1,17 @@
 /**
  * socketService.js
- * WebSocket nativo — reemplaza socket.io completamente.
  *
  * Protocolo del servidor: { type: string, payload: object }
  * Protocolo del cliente:  { type: string, payload: object }
  */
 
-const WS_URL = 'wss://dado-triple-backend.onrender.com'; // 'ws://localhost:3000';
+import { CONFIG } from '../config';
+const WS_URL = CONFIG.WS_URL;
 
 class SocketService {
   constructor() {
-    this.ws            = null;
-    this.listeners     = {};   // type → [callback, ...]
+    this.ws = null;
+    this.listeners = {};   // type → [callback, ...]
     this.reconnectTimer = null;
     this.isConnecting  = false;
 
