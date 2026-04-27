@@ -525,6 +525,7 @@ function handleDisconnect(ws) {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 const EVENT_HANDLERS = {
+  ping:          (ws) => ws.send(JSON.stringify({ type: 'pong' })),
   create_room:     handleCreateRoom,
   join_room:       handleJoinRoom,
   reconnect:       handleReconnect,
@@ -533,7 +534,6 @@ const EVENT_HANDLERS = {
   make_prediction: (ws, p) => handleMakePrediction(ws, p),
   select_dice:     (ws, p) => handleSelectDice(ws, p),
   start_game:      (ws) => handleStartGame(ws),
- main
 };
 
 function handleConnection(ws) {
