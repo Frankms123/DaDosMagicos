@@ -15,6 +15,7 @@ import GameOverScreen     from './src/screens/GameOverScreen';
 import SpectatorScreen    from './src/screens/SpectatorScreen';
 import RankingScreen      from './src/screens/RankingScreen';
 import ProfileScreen      from './src/screens/ProfileScreen';
+import ManualScreen       from './src/screens/ManualScreen';
 
 import useWebSocket from './src/hooks/useWebSocket';
 
@@ -28,7 +29,7 @@ const TEXT   = '#E2E8F0';
 
 // ─── Pantallas que NO muestran la tab bar ─────────────────────────────────────
 const HIDE_TAB_SCREENS = new Set([
-  'Auth', 'WaitingRoom', 'Game', 'RoundResults', 'GameOver', 'Spectator',
+  'Auth', 'WaitingRoom', 'Game', 'RoundResults', 'GameOver', 'Spectator', 'Manual',
 ]);
 
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
@@ -117,6 +118,7 @@ function AppNavigator() {
       {/* Tab screens */}
       <Stack.Screen name="Ranking" component={RankingScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="Manual"  component={ManualScreen} />
 
       {/* Game flow — sin tab bar */}
       <Stack.Screen name="WaitingRoom"  component={WaitingRoomScreen} />

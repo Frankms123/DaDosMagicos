@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   LogOut, ShieldCheck, Trophy, Medal, Award,
   TrendingUp, BarChart3, Target, Star, Zap,
-  Gamepad2, Crown, Lock,
+  Gamepad2, Crown, Lock, BookOpen,
 } from 'lucide-react-native';
 import useGameStore from '../store/useGameStore';
 import { API_URL } from '../services/apiService';
@@ -224,7 +224,15 @@ export default function ProfileScreen({ navigation }) {
               <Badge cond={podiumRate >= 75}         icon={Target}     label="Podio constante"  color={GREEN}  />
             </View>
 
-            {/* ── Cerrar sesión ── */}
+            {/* ── Botones de acción ── */}
+            <TouchableOpacity 
+              style={[styles.logoutBtn, { marginTop: 20, borderColor: PURPLE + '40', backgroundColor: PURPLE + '10' }]} 
+              onPress={() => { playSound('click', 0.55); navigation.navigate('Manual'); }}
+            >
+              <BookOpen size={18} color={PURPLE} />
+              <Text style={[styles.logoutText, { color: PURPLE }]}>Ver Manual de Juego</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
               <LogOut size={18} color={RED} />
               <Text style={styles.logoutText}>Cerrar sesión</Text>

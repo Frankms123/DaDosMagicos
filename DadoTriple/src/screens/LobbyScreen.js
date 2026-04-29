@@ -7,13 +7,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   User, Gamepad2, PlusCircle, LogIn, Eye, 
-  ShieldCheck, Wifi, WifiOff, AlertCircle 
+  ShieldCheck, AlertCircle, BookOpen 
 } from 'lucide-react-native';
 import socketService from '../services/socketService';
 import { playSound } from '../services/soundService';
 import useGameStore from '../store/useGameStore';
 import MagicBackground from '../components/MagicBackground';
-import GameButton from '../components/GameButton';
+// (unused import removed)
 import DiceFace from '../components/DiceFace';
 import { colors, shadows } from '../theme';
 
@@ -82,9 +82,10 @@ function Field({ label, value, onChangeText, placeholder, icon: Icon, ...props }
   );
 }
 
-export default function LobbyScreen() {
+export default function LobbyScreen({ navigation }) {
   const storedName = useGameStore(s => s.playerName);
   const isConnected = useGameStore(s => s.isConnected);
+  const hasSeenManual = useGameStore(s => s.hasSeenManual);
 
   const [tab, setTab] = useState('create');
   const [guestName, setGuestName] = useState('');
@@ -99,6 +100,12 @@ export default function LobbyScreen() {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
     socketService.connect();
     
+    // Si es la primera vez que entra y ya tiene nombre, mostrar manual
+    if (storedName && !hasSeenManual) {
+      useGameStore.setState({ hasSeenManual: true });
+      navigation.navigate('Manual', { onboarding: true });
+    }
+
     const offError = socketService.on('error', (p) => { setError(p.message); setLoading(false); shake(); });
     const offCreated = socketService.on('room_created', (payload) => {
       setLoading(false);
@@ -134,7 +141,16 @@ export default function LobbyScreen() {
 
     setError(null);
     setLoading(true);
+    
+    const isFirstTime = !storedName;
     useGameStore.setState({ playerName: name });
+
+    if (isFirstTime && !hasSeenManual) {
+      useGameStore.setState({ hasSeenManual: true });
+      setLoading(false);
+      navigation.navigate('Manual', { onboarding: true });
+      return; 
+    }
 
     socketService.clearReconnectData();
 
@@ -148,6 +164,15 @@ export default function LobbyScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <MagicBackground intensity={1.2} />
+      
+      {/* Botón de ayuda/manual */}
+      <TouchableOpacity 
+        style={styles.helpBtn} 
+        onPress={() => { playSound('click'); navigation.navigate('Manual'); }}
+      >
+        <BookOpen size={24} color={PURPLE} />
+      </TouchableOpacity>
+
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.root}>
         
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
@@ -237,6 +262,18 @@ export default function LobbyScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
+  helpBtn: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: CARD,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    ...shadows.purple,
+  },
   root: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', alignItems: 'center' },
   header: { alignItems: 'center', marginBottom: 30 },
   logoContainer: { padding: 12, backgroundColor: CARD, borderRadius: 20, borderWidth: 1, borderColor: BORDER, ...shadows.purple },
