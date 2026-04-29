@@ -13,6 +13,7 @@ const useGameStore = create((set, get) => ({
   roomCode:   null,
   isHost:     false,
   isSpectator: false,
+  hasSeenManual: false,
 
   // ─── Sala ────────────────────────────────────────────────────────────────────
   roomState:  null,
