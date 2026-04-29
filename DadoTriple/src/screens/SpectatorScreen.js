@@ -430,7 +430,7 @@ export default function SpectatorScreen({ route, navigation }) {
       >
         {/* ── Jugadores ── */}
         {players.length > 0 ? (
-          <View style={[styles.section, { width: '47%' }]}>
+          <View style={styles.section}>
             <Text style={styles.sectionLabel}>JUGADORES</Text>
             <View style={styles.playersList}>
               {players.map((p, i) => (
